@@ -4,5 +4,5 @@ psycopg2_binary==2.9.12
 pydantic==2.13.4
 pymongo==4.17.0
 python-dotenv==1.2.2
-python_bcrypt==0.3.2
+bcrypt==0.3.2
 uvicorn==0.52.1
