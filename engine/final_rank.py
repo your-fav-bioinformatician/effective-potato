@@ -15,7 +15,7 @@ class FinalRank:
 
     def _get_sql_connection(self, database_name):
         try:
-            return psycopg2.connect(self.conn_str)
+            return psycopg2.connect(self.sql_conn_str)
         except Exception as e:
             print(f"!!! SQL CONNECT ERROR ({database_name}): {e}")
             raise e
