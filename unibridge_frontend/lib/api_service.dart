@@ -1,16 +1,12 @@
 import 'dart:convert';
-// import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class UniBridgeApi {
+  // ✅ FIXED: Base URL must only contain the domain host
   static String get baseUrl {
-    if (kIsWeb) {
-      // Match the domain host (localhost) used by the web browser
-      return 'https://effective-potato-production.up.railway.app/quiz/init';
-    }
-    return 'https://effective-potato-production.up.railway.app/quiz/init';
+    return 'https://effective-potato-production.up.railway.app';
   }
 
   String? currentUserId; 
@@ -62,7 +58,7 @@ class UniBridgeApi {
     currentUsername = null;
   }
 
- Future<bool> initializeUser(Map<String, dynamic> userData) async {
+  Future<bool> initializeUser(Map<String, dynamic> userData) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/quiz/init'),
@@ -76,11 +72,9 @@ class UniBridgeApi {
         await _saveLocalSession(id);
         return true;
       } else {
-        // Throw the actual server error response
         throw Exception("Server [${response.statusCode}]: ${response.body}");
       }
     } catch (e) {
-      // Throw network or timeout errors
       throw Exception(e.toString());
     }
   }
