@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
-import 'theme.dart'; // Contains TechTheme
+import 'theme.dart'; // Contains the new Cyberpunk TechTheme
 import 'localization.dart';
 import 'api_service.dart';
 import 'screens.dart';
@@ -29,16 +29,16 @@ class UniBridgeApp extends StatelessWidget {
       title: 'UniBridge',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        // Updated to use TechTheme
-        primaryColor: TechTheme.primaryBlue,
-        scaffoldBackgroundColor: TechTheme.backgroundGrey,
+        // Updated to use the new Cyberpunk TechTheme
+        primaryColor: TechTheme.neonMagenta,
+        scaffoldBackgroundColor: TechTheme.deepPurpleBG,
         textTheme: TechTheme.textTheme,
         useMaterial3: true,
-        // Optional: Add color scheme for better widget defaults
         colorScheme: ColorScheme.fromSeed(
-          seedColor: TechTheme.primaryBlue,
-          primary: TechTheme.primaryBlue,
-          background: TechTheme.backgroundGrey,
+          seedColor: TechTheme.neonMagenta,
+          primary: TechTheme.neonMagenta,
+          surface: TechTheme.deepPurpleBG,
+          onSurface: TechTheme.readableWhite,
         ),
       ),
       locale: appLocale.locale,

@@ -1,20 +1,27 @@
 import pymongo
-import pyodbc
 import numpy as np
 import datetime
+from bson import ObjectId
 
+# --- 1. GLOBAL CACHE ---
+# Prevents pulling heavy vectors from MongoDB on every API request
+GLOBAL_CACHE = {
+    "majors_raw": None,
+    "concepts_raw": None,
+    "mbti_raw": None,
+}
 
 class UserVectorGenerator:
     def __init__(self, user_id, db_name="UniBridge_vectors", connection_string="mongodb://localhost:27017/"):
         self.client = pymongo.MongoClient(connection_string)
         self.db = self.client[db_name]
-        self.user_id = user_id
-
-        print(f"DEBUG: Connected to MongoDB. DB: '{db_name}'")
+        self.user_id = str(user_id)
 
         # State variables
+        self.user_data = {}
         self.neutral_vector = None
         self.all_major_vectors = None
+        self.major_id_to_index_map = {}
         self.user_vector = None
         self.concept_questions = []
 
@@ -23,175 +30,200 @@ class UserVectorGenerator:
         self.is_active_question_final = False
         self.user_answers = []
 
-        # 1. Load Base Data
-        self._load_major_vectors()
-        self._load_concept_vectors()
-        self._calculate_dynamic_weights()
-
-        # 2. Initialize User Vector
+        # Load and Calculate
+        self._populate_global_cache()
+        self._load_user_data()
+        self._load_major_vectors()       # Filters from cache
+        self._load_concept_vectors()     # Loads from cache
+        self._calculate_dynamic_weights()# Vectorized math
         self._initialize_user_state()
 
-    def _get_sql_connection(self):
+    def _populate_global_cache(self):
+        """Fetches large collections from MongoDB ONLY ONCE for the lifetime of the server."""
+        global GLOBAL_CACHE
+        if GLOBAL_CACHE["majors_raw"] is None:
+            GLOBAL_CACHE["majors_raw"] = list(self.db["Major_vector"].find({"vector": {"$exists": True}}))
+        
+        if GLOBAL_CACHE["concepts_raw"] is None:
+            GLOBAL_CACHE["concepts_raw"] = list(self.db["concept_vectors"].find({}, {
+                "id": 1, "question": 1, "concept_vector": 1, 
+                "layer": 1, "child_ids": 1, "parent_ids": 1, "relative_majors": 1
+            }))
+            GLOBAL_CACHE["concepts_raw"].sort(key=lambda x: x["id"])
+            
+        if GLOBAL_CACHE["mbti_raw"] is None:
+            GLOBAL_CACHE["mbti_raw"] = list(self.db["mbti_vectors"].find({}))
+
+    def _load_user_data(self):
         try:
-            conn_str = (
-                "Driver={ODBC Driver 17 for SQL Server};"
-                "Server=.\\SQLEXPRESS;"
-                "Database=Users_db;"
-                "Trusted_Connection=yes;"
-                "TrustServerCertificate=yes;"
-            )
-            return pyodbc.connect(conn_str)
-        except Exception as e:
-            print(f"SQL Connect Error inside Generator: {e}")
-            return None
+            oid = ObjectId(self.user_id)
+            user_doc = self.db["users_data"].find_one({"_id": oid})
+            if user_doc:
+                self.user_data = {
+                    "gpa": float(user_doc.get("gpa", 0.0)),
+                    "hs_type": user_doc.get("hs_type", ""),
+                    "gender": user_doc.get("gender", ""),
+                    "mbti": user_doc.get("mbti", "")
+                }
+            else:
+                self.user_data = {"gpa": 0.0, "hs_type": "", "gender": "", "mbti": ""}
+        except Exception:
+            self.user_data = {"gpa": 0.0, "hs_type": "", "gender": "", "mbti": ""}
 
     def _load_major_vectors(self):
-        collection = self.db["Major_vector"]
-
-        # Check raw count
-        total_docs = collection.count_documents({})
-        print(f"DEBUG: Major_vectors total documents: {total_docs}")
-
-        cursor = collection.find({"vector": {"$exists": True}}, {"vector": 1})
-
+        global GLOBAL_CACHE
         vectors = []
-        for doc in cursor:
+        self.major_id_to_index_map = {}
+        
+        u_gpa = self.user_data.get("gpa", 0.0)
+        u_hs = self.user_data.get("hs_type", "")
+        u_gen = self.user_data.get("gender", "").upper()
+
+        current_idx = 0
+        for doc in GLOBAL_CACHE["majors_raw"]:
             vec = doc.get("vector")
+            dept_id = doc.get("dept_id")
+            elig = doc.get("eligibility", {})
+
+            # Phase 1: Eligibility Pre-filtering
+            m_hs = elig.get("hs")
+            if u_hs and m_hs and u_hs != m_hs and m_hs != 'Both': continue
+                
+            m_gpa = float(elig.get("gpa", 0.0))
+            if u_gpa < (m_gpa - 3.0): continue
+                
+            m_gen = elig.get("gender", "both").lower()
+            if u_gen == 'F' and m_gen not in ['f', 'female', 'both', 'co-ed']: continue
+            if u_gen == 'M' and m_gen not in ['m', 'male', 'both', 'co-ed']: continue
+
             if isinstance(vec, list) and len(vec) > 0:
                 vectors.append(vec)
-
-        print(f"DEBUG: Extracted {len(vectors)} valid vectors from cursor.")
+                if dept_id is not None:
+                    self.major_id_to_index_map[dept_id] = current_idx
+                current_idx += 1
 
         if not vectors:
-            print("CRITICAL ERROR: No vectors found in DB. Generator cannot function.")
             vectors = [np.zeros(768).tolist()]
 
         self.all_major_vectors = np.array(vectors, dtype=np.float64)
         self.neutral_vector = np.mean(self.all_major_vectors, axis=0)
 
     def _load_concept_vectors(self):
-        collection = self.db["Concept_vectors"]
-        cursor = collection.find({}, {"id": 1, "question": 1, "concept_vector": 1})
-        self.concept_questions = list(cursor)
-        self.concept_questions.sort(key=lambda x: x["id"])
-        print(f"DEBUG: Loaded {len(self.concept_questions)} concept questions.")
-
+        global GLOBAL_CACHE
+        import copy
+        
+        # 1. Get the surviving eligible major IDs from the map we just built
+        eligible_major_ids = set(self.major_id_to_index_map.keys())
+        
+        # 2. Filter the questions as we copy them from the cache
+        valid_questions = []
+        for q in GLOBAL_CACHE["concepts_raw"]:
+            r_majors = q.get("relative_majors", [])
+            
+            # STRICT FIX: The question MUST explicitly match an eligible major.
+            # Empty arrays will now be rejected, preventing rogue DB entries.
+            if r_majors and any(rm in eligible_major_ids for rm in r_majors):
+                valid_questions.append(copy.deepcopy(q))
+        self.concept_questions = valid_questions
+        print(f"DEBUG: Eligibility applied. {len(eligible_major_ids)} majors and {len(self.concept_questions)} questions loaded.")
     def _calculate_dynamic_weights(self):
-        variances = []
-        major_norms = np.linalg.norm(self.all_major_vectors, axis=1)
+        """Fully vectorized weight calculation using numpy matrix broadcasting."""
+        if not self.concept_questions:
+            return
+
+        # Stack all concept vectors into a single matrix (Concepts x 768)
+        concept_matrix = np.array([q.get("concept_vector", np.zeros(self.all_major_vectors.shape[1])) 
+                                   for q in self.concept_questions], dtype=np.float64)
+
+        # Calculate Norms
+        major_norms = np.linalg.norm(self.all_major_vectors, axis=1, keepdims=True)
         major_norms[major_norms == 0] = 1.0
+        
+        concept_norms = np.linalg.norm(concept_matrix, axis=1)
+        concept_norms[concept_norms == 0] = 1.0
 
-        for q in self.concept_questions:
-            c_vec = np.array(q.get("concept_vector", []), dtype=np.float64)
-            if c_vec.size == 0:
-                variances.append(0)
-                continue
-            c_norm = np.linalg.norm(c_vec)
-            if c_norm == 0:
-                variances.append(0)
-                continue
+        # Calculate cosine similarities for ALL majors vs ALL concepts instantly
+        dot_products = np.dot(self.all_major_vectors, concept_matrix.T)
+        
+        # Broadcasting norms to match the shape
+        similarities = dot_products / (major_norms * concept_norms)
+        distances = 1 - np.clip(similarities, -1, 1)
 
-            if c_vec.shape[0] != self.all_major_vectors.shape[1]:
-                variances.append(0)
-                continue
+        # Calculate variance (mean distance per concept across all majors)
+        variances = np.mean(distances, axis=0)
+        total_variance = np.sum(variances)
 
-            dot_products = np.dot(self.all_major_vectors, c_vec)
-            similarities = dot_products / (major_norms * c_norm)
-            similarities = np.clip(similarities, -1, 1)
-            distances = 1 - similarities
-
-            variance_q = np.mean(distances)
-            variances.append(variance_q)
-
-        total_variance = sum(variances)
+        # Assign calculated weights back to the questions
         for i, q in enumerate(self.concept_questions):
-            if total_variance > 0:
-                q["weight"] = variances[i] / total_variance
-            else:
-                q["weight"] = 0
-
-    def _get_user_mbti_type(self):
-        """Fetches the MBTI string (e.g. 'INTJ') from SQL Users table."""
-        conn = self._get_sql_connection()
-        if not conn: return None
-        try:
-            cursor = conn.cursor()
-            cursor.execute("SELECT mbti FROM Users WHERE user_id = ?", (self.user_id,))
-            row = cursor.fetchone()
-            if row:
-                return row[0]  # e.g., "INTJ"
-            return None
-        finally:
-            conn.close()
+            q["weight"] = variances[i] / total_variance if total_variance > 0 else 0
 
     def _initialize_user_state(self):
+        global GLOBAL_CACHE
         self.active_question = None
         self.active_question_index = -1
         self.is_active_question_final = False
         self.user_answers = []
 
-        mbti_vector = None
+        # 1. CHECK MONGODB FOR IN-PROGRESS QUIZ
+        user_vector_doc = self.db["User_vectors"].find_one({"user_id": self.user_id})
 
-        # 1. Get MBTI Type from SQL
-        mbti_type = self._get_user_mbti_type()
+        if user_vector_doc and "current_user_vector" in user_vector_doc:
+            # Resume existing session state
+            self.user_vector = np.array(user_vector_doc["current_user_vector"], dtype=np.float64)
+            self.user_answers = user_vector_doc.get("answers", [])
+            
+            # If the user was just assigned a question by /next_q, reload it into memory
+            active_q_id = user_vector_doc.get("active_question_id")
+            if active_q_id:
+                self.is_active_question_final = user_vector_doc.get("is_final", False)
+                self._restore_active_question(active_q_id)
+            return
+
+        # 2. IF FIRST TIME STARTING QUIZ (Calculate MBTI + Neutral)
+        mbti_vector = None
+        mbti_type = self.user_data.get("mbti", "").upper()
 
         if mbti_type:
-            print(f"DEBUG: Found MBTI type for user {self.user_id}: {mbti_type}")
-            try:
-                # 2. Search for vector in 'mbti_vectors' collection
-                # Assuming collection schema: { "type": "INTJ", "vector": [...] }
-                mbti_collection = self.db["mbti_vectors"]
-
-                # Case-insensitive search
-                mbti_doc = mbti_collection.find_one({"mbti": {"$regex": f"^{mbti_type}$", "$options": "i"}})
-
-                if mbti_doc and "mbti_vector" in mbti_doc:
-                    raw_vec = mbti_doc["mbti_vector"]
+            for mbti_doc in GLOBAL_CACHE["mbti_raw"]:
+                if mbti_doc.get("mbti", "").upper() == mbti_type:
+                    raw_vec = mbti_doc.get("mbti_vector", [])
                     if len(raw_vec) > 0:
                         mbti_vector = np.array(raw_vec, dtype=np.float64)
-                        print(f"DEBUG: Successfully loaded vector for {mbti_type}")
-                    else:
-                        print(f"DEBUG: Vector for {mbti_type} is empty.")
-                else:
-                    print(f"DEBUG: No vector found in 'mbti_vectors' collection for type: {mbti_type}")
+                    break
 
-            except Exception as e:
-                print(f"Error fetching MBTI vector from Mongo: {e}")
+        if mbti_vector is not None and mbti_vector.shape == self.neutral_vector.shape:
+            combined = mbti_vector + self.neutral_vector
+            self.user_vector = self._normalize_vector_l2(combined)
         else:
-            print(f"DEBUG: No MBTI type found in SQL for user {self.user_id}")
-
-        # 3. Combine with Neutral
-        if mbti_vector is not None:
-            if mbti_vector.shape == self.neutral_vector.shape:
-                # Add neutral vector on top of MBTI vector as requested
-                combined = mbti_vector + self.neutral_vector
-                self.user_vector = self._normalize_vector_l2(combined)
-            else:
-                print(f"Dimension mismatch: MBTI {mbti_vector.shape} vs Neutral {self.neutral_vector.shape}. Fallback.")
-                self.user_vector = self.neutral_vector.copy()
-        else:
-            # Fallback if no MBTI data exists
             self.user_vector = self.neutral_vector.copy()
 
+    
     def get_normalized_answer(self, answer):
-        if not (1 <= answer <= 5):
-            return 0.0
+        if not (1 <= answer <= 5): return 0.0
         return (answer - 3) / 2.0
 
     def _normalize_vector_l2(self, vec):
         norm = np.linalg.norm(vec)
-        if norm == 0:
-            return vec
+        if norm == 0: return vec
         return vec / norm
 
-    def set_active_question(self, question_id, is_final=False):
+    def _restore_active_question(self, question_id, is_final=False):
         for index, q in enumerate(self.concept_questions):
             if q.get("id") == question_id:
                 self.active_question = q
                 self.active_question_index = index
                 self.is_active_question_final = is_final
+                
+                # SAVE TO MONGODB: So /process_a remembers this question
+                self.db["User_vectors"].update_one(
+                    {"user_id": self.user_id},
+                    {"$set": {
+                        "active_question_id": question_id, 
+                        "is_final": is_final
+                    }}
+                )
                 return q
-
+                
         self.active_question = None
         self.active_question_index = -1
         self.is_active_question_final = False
@@ -199,39 +231,36 @@ class UserVectorGenerator:
 
     def _save_and_reset(self):
         try:
-            user_collection = self.db["User_vectors"]
-            document = {
-                "user_id": self.user_id,
-                "final_user_vector": self.user_vector.tolist(),
-                "answers": self.user_answers,
-                "updated_at": datetime.datetime.utcnow(),
-                "status": "complete"
-            }
-            user_collection.insert_one(document)
-            print(f"User {self.user_id} vector stored. Vector sum: {np.sum(self.user_vector)}")
-        except Exception as e:
-            print(f"Failed to save user vector: {e}")
+            # Replaced insert_one with update_one to prevent duplicates
+            self.db["User_vectors"].update_one(
+                {"user_id": self.user_id},
+                {"$set": {
+                    "final_user_vector": self.user_vector.tolist(),
+                    "answers": self.user_answers,
+                    "updated_at": datetime.datetime.utcnow(),
+                    "status": "complete",
+                    "active_question_id": None
+                }}
+            )
+            print(f"User {self.user_id} vector finalized and stored.")
         finally:
             self.client.close()
             self.active_question = None
 
     def process_answer(self, answer_int):
-        if self.active_question is None:
-            print("Warning: process_answer called without active question.")
-            return self.user_vector
+        if self.active_question is None: return self.user_vector
 
         concept_vector = np.array(self.active_question.get("concept_vector", []), dtype=np.float64)
-        if concept_vector.size == 0:
-            print("Warning: Active question has no vector.")
-            return self.user_vector
+        if concept_vector.size == 0: return self.user_vector
 
         answer_val = self.get_normalized_answer(answer_int)
         weight = self.active_question.get("weight", 0)
+        BOOST = 25.0
+        delta_vector = concept_vector * weight * answer_val * BOOST
 
-        delta_vector = concept_vector * weight * answer_val
-
+        self.user_vector = self.user_vector / (np.linalg.norm(self.user_vector) + 1e-9)
         self.user_vector = self.user_vector + delta_vector
-        self.user_vector = self._normalize_vector_l2(self.user_vector)
+        self.user_vector = self.user_vector / (np.linalg.norm(self.user_vector) + 1e-9)
 
         self.user_answers.append({
             "id": self.active_question.get("id"),
@@ -240,5 +269,15 @@ class UserVectorGenerator:
 
         if self.is_active_question_final:
             self._save_and_reset()
+        else:
+            # SAVE INTERMEDIATE PROGRESS TO DB
+            self.db["User_vectors"].update_one(
+                {"user_id": self.user_id},
+                {"$set": {
+                    "current_user_vector": self.user_vector.tolist(),
+                    "answers": self.user_answers,
+                    "active_question_id": None # Cleared until /next_q sets it again
+                }}
+            )
 
         return self.user_vector

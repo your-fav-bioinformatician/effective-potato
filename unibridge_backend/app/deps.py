@@ -1,25 +1,41 @@
-from app.session_manager import SessionManager
+import os
+import pymongo
+from dotenv import load_dotenv
+from .session_manager import SessionManager
 from engine.final_rank import FinalRank
 
+# --- Load environment variables from .env ---
+load_dotenv()
+
 # --- Configuration ---
-MONGO_CONNECTION_STRING = "mongodb://localhost:27017/"
-MONGO_DB_NAME = "UniBridge_vectors"
+MONGO_CONNECTION_STRING = os.environ["MONGO_CONNECTION_STRING"]
+MONGO_DB_NAME = os.environ["MONGO_DB_NAME"]
+SQL_CONNECTION_STRING = os.environ["SQL_CONNECTION_STRING"]
+
+# --- Global MongoDB Client (Connection Pooling) ---
+# This client is created once and reused across all requests
+mongo_client = pymongo.MongoClient(MONGO_CONNECTION_STRING)
+mongo_db = mongo_client[MONGO_DB_NAME]
+
+def get_mongo_db():
+    """
+    Dependency provider for the MongoDB database.
+    Reuses the global, thread-safe MongoClient pool.
+    """
+    return mongo_db
 
 # --- Singleton Session Manager ---
-_session_manager = SessionManager()
+_session_manager = SessionManager(
+    mongo_uri=MONGO_CONNECTION_STRING,
+    db_name=MONGO_DB_NAME
+)
 
 def get_session_manager() -> SessionManager:
-    """
-    Dependency provider for the SessionManager.
-    Singleton instance to maintain state across API calls.
-    """
     return _session_manager
 
 def get_final_ranker() -> FinalRank:
-    """
-    Dependency provider for the FinalRank engine.
-    """
     return FinalRank(
         mongo_conn_str=MONGO_CONNECTION_STRING, 
-        db_name=MONGO_DB_NAME
+        db_name=MONGO_DB_NAME,
+        sql_conn_str=SQL_CONNECTION_STRING
     )
