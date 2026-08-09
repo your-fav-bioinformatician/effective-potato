@@ -58,7 +58,7 @@ class FinalRank:
         conn = self._get_sql_connection("Unis_db")
         try:
             cursor = conn.cursor()
-            cursor.execute("USE Unis_db;")
+            # cursor.execute("USE Unis_db;")
 
             sql = """
                   SELECT d.dept_id, d.dept_name, d.lat, d.lon, d.gpa, d.hs, d.gender, 
