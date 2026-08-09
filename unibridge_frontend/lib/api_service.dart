@@ -8,9 +8,9 @@ class UniBridgeApi {
   static String get baseUrl {
     if (kIsWeb) {
       // Match the domain host (localhost) used by the web browser
-      return 'effective-potato-production.up.railway.app:8080';
+      return 'https://effective-potato-production.up.railway.app/quiz/init';
     }
-    return 'effective-potato-production.up.railway.app:8080';
+    return 'https://effective-potato-production.up.railway.app/quiz/init';
   }
 
   String? currentUserId; 
