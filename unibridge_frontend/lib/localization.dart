@@ -175,7 +175,7 @@ class AppTranslations {
       "People fascinate me—I love figuring out what makes us tick as a society.": "يذهلني الناس — أحب معرفة ما يحركنا كمجتمع.",
       "Whenever I'm in a group, I naturally end up taking charge—and honestly, I enjoy it.": "كلما كنت في مجموعة، أجد نفسي طبيعياً أتولى القيادة — وبصراحة، أنا أستمتع بذلك.",
       "I'm the kind of person who actually does math problems for fun.": "أنا من النوع الذي يحل مسائل الرياضيات من أجل المتعة حقاً.",
-      "Put me in a lab coat with some pipettes and I'm happy—I absolutely love hands-on lab work.": "أعطني معطف مختبر وبعض الماصات وسأكون سعيداً — أحب العمل العملي في المختبرات بشدة.",
+      "Put me in a lab coat with some pipettes and I'm happy—I absolutely love hands-on lab work.": "احب العمل في المختبر",
       "I'm a total tech geek": "أنا مهووس جداً بالتقنية",
       "I'm usually the \"therapist\" of my friend group. I love trying to understand how the mind works and helping people process their feelings.": "أنا عادة \"المعالج النفسي\" في مجموعة أصدقائي. أحب محاولة فهم كيف يعمل العقل ومساعدة الناس في التعامل مع مشاعرهم.",
 
