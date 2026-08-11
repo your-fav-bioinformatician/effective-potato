@@ -1161,3 +1161,161 @@ class _AuthWindowState extends State<AuthWindow> {
     );
   }
 }
+
+class ProfileScreen extends StatelessWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final api = Provider.of<UniBridgeApi>(context, listen: false);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('SYS.PROFILE', style: TechTheme.textTheme.displayMedium),
+        centerTitle: true,
+      ),
+      body: FutureBuilder<Map<String, dynamic>?>(
+        future: api.getUserProfile(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator(color: TechTheme.neonCyan));
+          }
+          if (!snapshot.hasData || snapshot.data == null) {
+            return Center(child: Text('PROFILE NOT FOUND', style: TechTheme.textTheme.bodyLarge?.copyWith(color: TechTheme.neonMagenta)));
+          }
+
+          final data = snapshot.data!;
+          return ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Container(
+                decoration: TechTheme.cardDecoration,
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('USER ID: ${data['username']}', style: TechTheme.textTheme.displayMedium),
+                    const Divider(color: TechTheme.neonCyan, thickness: 1, height: 32),
+                    _buildProfileRow('Account Type', data['is_guest'] == true ? 'GUEST' : 'AUTHENTICATED'),
+                    _buildProfileRow('MBTI Profile', data['mbti'] ?? 'PENDING'),
+                    _buildProfileRow('Current GPA', data['gpa']?.toString() ?? 'N/A'),
+                    _buildProfileRow('City', data['city'] ?? 'UNKNOWN'),
+                    _buildProfileRow('Career Goal', data['career_goal'] ?? 'UNDECIDED'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: TechTheme.deepPurpleBG,
+                  side: const BorderSide(color: TechTheme.neonMagenta, width: 2),
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                ),
+                onPressed: () {
+                  api.logout();
+                  Navigator.of(context).pushReplacementNamed('/');
+                },
+                child: Text('TERMINATE SESSION (LOGOUT)', style: TechTheme.textTheme.labelLarge),
+              )
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildProfileRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TechTheme.textTheme.bodyMedium),
+          Text(value, style: TechTheme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold, color: TechTheme.neonCyan)),
+        ],
+      ),
+    );
+  }
+}
+
+class CatalogScreen extends StatefulWidget {
+  const CatalogScreen({super.key});
+
+  @override
+  State<CatalogScreen> createState() => _CatalogScreenState();
+}
+
+class _CatalogScreenState extends State<CatalogScreen> {
+  bool _showBookmarks = false;
+  String _searchQuery = "";
+
+  @override
+  Widget build(BuildContext context) {
+    final api = Provider.of<UniBridgeApi>(context, listen: false);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_showBookmarks ? 'SAVED_DATA' : 'SYS.CATALOG', style: TechTheme.textTheme.displayMedium),
+        actions: [
+          IconButton(
+            icon: Icon(_showBookmarks ? Icons.list : Icons.bookmark, color: TechTheme.neonMagenta),
+            onPressed: () => setState(() => _showBookmarks = !_showBookmarks),
+          )
+        ],
+      ),
+      body: Column(
+        children: [
+          if (!_showBookmarks)
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                style: const TextStyle(color: TechTheme.readableWhite),
+                decoration: TechTheme.inputDecoration('QUERY_DATABASE...'),
+                onChanged: (val) => setState(() => _searchQuery = val),
+              ),
+            ),
+          Expanded(
+            child: FutureBuilder<List<dynamic>>(
+              future: _showBookmarks ? api.getBookmarks() : api.getCatalogMajors(search: _searchQuery),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator(color: TechTheme.neonCyan));
+                }
+                
+                final items = snapshot.data ?? [];
+                if (items.isEmpty) {
+                  return Center(child: Text('NO RECORDS FOUND.', style: TechTheme.textTheme.bodyLarge));
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: items.length,
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: TechTheme.cardDecoration,
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(16),
+                        title: Text(item['title'] ?? item['name'] ?? 'UNKNOWN', style: TechTheme.textTheme.labelLarge),
+                        subtitle: Text(
+                          _showBookmarks ? 'TYPE: ${item['item_type'].toString().toUpperCase()}' : 'CATEGORY: ${item['category']}', 
+                          style: TechTheme.textTheme.bodyMedium
+                        ),
+                        trailing: const Icon(Icons.arrow_forward_ios, color: TechTheme.neonCyan),
+                        onTap: () {
+                          // Route to detail breakdown
+                        },
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
