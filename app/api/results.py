@@ -6,36 +6,11 @@ from engine.final_rank import FinalRank
 
 router = APIRouter()
 
-# --- Mock Data Fallback ---
-MOCK_RESULTS = [
-    {
-        "full_name": "Software & AI Engineering",
-        "score": 0.95,
-        "description": "High alignment with analytical problem solving and technical career objectives."
-    },
-    {
-        "full_name": "Data Science & Cyber Analytics",
-        "score": 0.88,
-        "description": "Strong match based on psychometric profile and high quantitative affinity."
-    },
-    {
-        "full_name": "Computer Network Systems",
-        "score": 0.82,
-        "description": "Optimal path balancing engineering systems with practical implementation."
-    },
-    {
-        "full_name": "Biomedical Engineering",
-        "score": 0.76,
-        "description": "Secondary match correlating scientific track background with technical problem solving."
-    }
-]
-
 @router.post("/results")
 def get_results(req: dict, db = Depends(get_mongo_db)):
     user_id = req.get("user_id")
-
-    if not user_id:
-        raise HTTPException(status_code=400, detail="Missing user_id parameter.")
+    username = req.get("username")
+    password = req.get("password")
 
     # 1. Fetch user from DB
     try:
@@ -46,37 +21,36 @@ def get_results(req: dict, db = Depends(get_mongo_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User profile not found.")
 
-    # 2. Verify account is authenticated (Not guest)
-    if user.get("is_guest", True) or not user.get("username"):
+    # 2. Check if user completed signup
+    stored_hash = user.get("password")
+    if not stored_hash:
         raise HTTPException(
-            status_code=401, 
-            detail="Authentication required to view persistent results. Please log in or sign up."
+            status_code=400, 
+            detail="User account has not been registered yet. Complete signup first."
         )
 
-    # 3. Check for previously saved persistent results
-    if "saved_results" in user and user["saved_results"]:
-        return user["saved_results"]
+    # 3. Verify credentials safely
+    if not verify_password(password, stored_hash):
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
 
-    # 4. Generate Actual Results via Engine with Mock Fallback
+    # 4. Generate Actual Results using the FinalRank Engine
     try:
+        # Pass the connection strings from your deps to ensure it points to the right DB
         ranker = FinalRank(
             mongo_conn_str=MONGO_CONNECTION_STRING, 
             db_name=MONGO_DB_NAME,
             sql_conn_str=SQL_CONNECTION_STRING
         )
+        
+        # Calculate the top 5 matches
         actual_results = ranker.generate_rankings(user_id)
         
         if not actual_results:
-            actual_results = MOCK_RESULTS
-
+            # Fallback if the user somehow filtered out every single major in existence
+            return []
+            
+        return actual_results
+        
     except Exception as e:
-        print(f"Engine calculation error fallback to mock data: {e}")
-        actual_results = MOCK_RESULTS
-
-    # Persist calculated results to user document
-    db["users_data"].update_one(
-        {"_id": user["_id"]},
-        {"$set": {"saved_results": actual_results}}
-    )
-
-    return actual_results
+        print(f"ERROR calculating final results: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate final rankings.")

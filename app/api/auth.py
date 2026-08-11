@@ -10,7 +10,7 @@ router = APIRouter()
 
 # --- Request Models ---
 class SignupRequest(BaseModel):
-    user_id: Optional[str] = None  # If passed, converts guest profile to permanent account
+    user_id: str
     username: str
     password: str
 
@@ -24,62 +24,34 @@ class SessionRequest(BaseModel):
 
 @router.post("/signup")
 def signup(req: SignupRequest, db = Depends(get_mongo_db), mgr: SessionManager = Depends(get_session_manager)):
-    """
-    Supports standalone signup up front OR converting a guest session after test completion.
-    """
-    # 1. Check if username exists
+    """Links user credentials to the initialized profile and activates session."""
+    # Check if username exists
     existing_user = db["users_data"].find_one({"username": req.username})
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already taken.")
 
     hashed_pw = hash_password(req.password)
-
-    # 2. If converting an existing guest session
-    if req.user_id:
-        try:
-            query = {"_id": ObjectId(req.user_id)}
-        except Exception:
-            query = {"user_id": req.user_id}
-
-        result = db["users_data"].update_one(
-            query,
-            {"$set": {
-                "username": req.username, 
-                "password": hashed_pw, 
-                "is_guest": False,
-                "session_active": True
-            }}
-        )
-
-        if result.matched_count > 0:
-            mgr.create_session(req.user_id, MONGO_CONNECTION_STRING, MONGO_DB_NAME)
-            return {
-                "message": "Guest profile converted to permanent account successfully.",
-                "user_id": req.user_id,
-                "username": req.username,
-                "is_authenticated": True
-            }
-
-    # 3. Up-front Signup (No prior guest session)
-    new_user = {
-        "username": req.username,
-        "password": hashed_pw,
-        "is_guest": False,
-        "session_active": True,
-        "created_at": "now"
-    }
     
-    insert_res = db["users_data"].insert_one(new_user)
-    user_id_str = str(insert_res.inserted_id)
+    try:
+        query = {"_id": ObjectId(req.user_id)}
+    except Exception:
+        query = {"user_id": req.user_id}
 
-    mgr.create_session(user_id_str, MONGO_CONNECTION_STRING, MONGO_DB_NAME)
-    
-    return {
-        "message": "Account created successfully.",
-        "user_id": user_id_str,
-        "username": req.username,
-        "is_authenticated": True
-    }
+    result = db["users_data"].update_one(
+        query,
+        {"$set": {
+            "username": req.username, 
+            "password": hashed_pw, 
+            "session_active": True
+        }}
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User profile not found. Complete initialization first.")
+
+    # Initialize active session state
+    mgr.create_session(req.user_id, MONGO_CONNECTION_STRING, MONGO_DB_NAME)
+    return {"message": "Account created successfully.", "user_id": req.user_id, "username": req.username}
 
 
 @router.post("/login")
@@ -95,33 +67,21 @@ def login(req: LoginRequest, db = Depends(get_mongo_db), mgr: SessionManager = D
     return {
         "message": "Login successful.",
         "user_id": user_id_str,
-        "username": user["username"],
-        "is_authenticated": True
+        "username": user["username"]
     }
 
 
 @router.post("/logout")
 def logout(req: SessionRequest, mgr: SessionManager = Depends(get_session_manager)):
-    """Ends the user session."""
+    """Ends the user session in MongoDB."""
     mgr.end_session(req.user_id)
     return {"message": "Logged out successfully."}
 
 
 @router.get("/verify/{user_id}")
-def verify_session(user_id: str, db = Depends(get_mongo_db), mgr: SessionManager = Depends(get_session_manager)):
-    """Checks whether a stored session is authenticated or guest."""
-    try:
-        user = db["users_data"].find_one({"_id": ObjectId(user_id)})
-    except Exception:
-        user = db["users_data"].find_one({"user_id": user_id})
-
-    if not user:
-        return {"status": "guest", "is_authenticated": False}
-
-    is_authenticated = not user.get("is_guest", True) and user.get("username") is not None
-    return {
-        "status": "active" if is_authenticated else "guest",
-        "user_id": user_id,
-        "username": user.get("username"),
-        "is_authenticated": is_authenticated
-    }
+def verify_session(user_id: str, mgr: SessionManager = Depends(get_session_manager)):
+    """Checks whether a stored session is still valid/active."""
+    is_active = mgr._is_active_session(user_id)
+    if not is_active:
+        raise HTTPException(status_code=401, detail="Session expired or invalid.")
+    return {"status": "active", "user_id": user_id}
