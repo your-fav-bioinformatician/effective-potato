@@ -70,7 +70,7 @@ class _TechButtonState extends State<TechButton> {
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
         decoration: BoxDecoration(
           color: widget.isPrimary ? TechTheme.neonMagenta.withValues(alpha: 0.2) : TechTheme.deepPurpleBG,
-          borderRadius: BorderRadius.circular(0),
+          borderRadius: BorderRadius.circular(0), // Sharp
           border: Border.all(color: widget.isPrimary ? TechTheme.neonMagenta : TechTheme.neonCyan, width: 2),
           boxShadow: _isPressed 
             ? [] 
@@ -217,68 +217,7 @@ class InfoNote extends StatelessWidget {
   }
 }
 
-class LoadingTechWidget extends StatelessWidget { 
-  const LoadingTechWidget({super.key}); 
-  @override Widget build(BuildContext context) { final t = AppTranslations(Provider.of<AppLocale>(context).locale); return Column(mainAxisAlignment: MainAxisAlignment.center, children: [const SizedBox(width: 40, height: 40, child: CircularProgressIndicator(color: TechTheme.neonCyan, strokeWidth: 3)), const SizedBox(height: 24), Text(t.t('loading_text'), style: TechTheme.textTheme.bodyMedium?.copyWith(color: TechTheme.neonMagenta))]); } 
-}
-
-// --- MAIN WEB LAYOUT (Replaces NavBar.tsx) ---
-class MainWebLayout extends StatefulWidget {
-  final Widget child;
-  const MainWebLayout({super.key, required this.child});
-
-  @override
-  State<MainWebLayout> createState() => _MainWebLayoutState();
-}
-
-class _MainWebLayoutState extends State<MainWebLayout> {
-  @override
-  Widget build(BuildContext context) {
-    final t = AppTranslations(Provider.of<AppLocale>(context).locale);
-    final isDesktop = MediaQuery.of(context).size.width >= 800;
-
-    return Scaffold(
-      backgroundColor: TechTheme.deepPurpleBG,
-      appBar: const TechAppBar(),
-      body: Row(
-        children: [
-          if (isDesktop)
-            Container(
-              width: 250,
-              decoration: const BoxDecoration(
-                border: Border(right: BorderSide(color: TechTheme.neonCyan, width: 2)),
-                color: TechTheme.cardPurple,
-              ),
-              child: Column(
-                children: [
-                  const SizedBox(height: 32),
-                  _buildNavButton(t.t('nav_dashboard'), Icons.dashboard, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DashboardWindow()))),
-                  _buildNavButton(t.t('nav_catalog'), Icons.book, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const CatalogWindow()))),
-                  _buildNavButton(t.t('nav_search'), Icons.search, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SearchWindow()))),
-                  _buildNavButton(t.t('nav_articles'), Icons.article, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ArticlesWindow()))),
-                  const Spacer(),
-                  _buildNavButton(t.t('auth_title'), Icons.security, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AuthWindow()))),
-                  const SizedBox(height: 32),
-                ],
-              ),
-            ),
-          Expanded(child: widget.child),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNavButton(String title, IconData icon, VoidCallback onTap) {
-    return ListTile(
-      leading: Icon(icon, color: TechTheme.neonMagenta),
-      title: Text(title, style: TechTheme.textTheme.bodyLarge?.copyWith(color: TechTheme.readableWhite)),
-      onTap: onTap,
-      hoverColor: TechTheme.neonCyan.withValues(alpha: 0.1),
-    );
-  }
-}
-
-// --- CORE SCREENS ---
+// --- SCREENS ---
 
 // 1. Splash
 class SplashScreen extends StatefulWidget {
@@ -300,7 +239,8 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
 
     if (hasValidSession) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DashboardWindow()));
+      // Resume active assessment or go straight to results
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const QuizScreen()));
     } else {
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const OnboardingScreen()));
     }
@@ -442,8 +382,7 @@ class _UserInitScreenState extends State<UserInitScreen> {
       setState(() { _lat = position.latitude; _lon = position.longitude; _isLocationLoading = false; _locationStatus = "Success"; });
     } catch (e) { setState(() { _isLocationLoading = false; _locationStatus = "Error"; }); }
   }
-
-  Future<void> _submit(BuildContext context) async {
+Future<void> _submit(BuildContext context) async {
     if (_isLoading) return; 
 
     final locale = Provider.of<AppLocale>(context, listen: false).locale;
@@ -493,11 +432,12 @@ class _UserInitScreenState extends State<UserInitScreen> {
       if (!mounted) return;
       setState(() => _isLoading = false);
       
+      // REPLACED: Print the exact error caught from the API
       messenger.showSnackBar(
         SnackBar(
           content: Text("Error: ${e.toString()}"),
-          backgroundColor: Colors.red, 
-          duration: const Duration(seconds: 5), 
+          backgroundColor: Colors.red, // Optional: makes error more visible
+          duration: const Duration(seconds: 5), // Keep it on screen longer to read it
         ),
       );
     }
@@ -719,7 +659,7 @@ class _QuizScreenState extends State<QuizScreen> {
     setState(() => _isLoading = true);
     final api = Provider.of<UniBridgeApi>(context, listen: false);
     final q = await api.getNextQuestion();
-    if (q == null || q['status'] == 'completed') { if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AuthWindow())); return; }
+    if (q == null || q['status'] == 'completed') { if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ResultsScreen())); return; }
     if (mounted) setState(() { currentQuestion = q; _selectedAnswer = null; _isLoading = false; });
   }
   
@@ -733,6 +673,8 @@ class _QuizScreenState extends State<QuizScreen> {
   @override
   Widget build(BuildContext context) {
     final t = AppTranslations(Provider.of<AppLocale>(context).locale);
+    
+    // Utilize the new DAG layer info if available
     final currentLayer = currentQuestion?['layer'];
     
     return Scaffold(
@@ -770,6 +712,7 @@ class _QuizScreenState extends State<QuizScreen> {
                   ).animate().fadeIn().moveY(begin: 20, end: 0),
                   const SizedBox(height: 32),
                   
+                  // Vertical Likert Scale
                   Column(
                     children: List.generate(5, (index) { 
                       final val = 5 - index; 
@@ -805,7 +748,7 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 }
 
-// 5. Results (Legacy fallback for Mobile/direct routing, usually replaced by Dashboard flow)
+// 5. Results
 class ResultsScreen extends StatefulWidget { 
   const ResultsScreen({super.key}); 
   @override 
@@ -813,18 +756,40 @@ class ResultsScreen extends StatefulWidget {
 }
 
 class _ResultsScreenState extends State<ResultsScreen> {
+  final _userController = TextEditingController(); 
+  final _passController = TextEditingController(); 
   List<dynamic> results = []; 
-  bool _isLoading = true;
+  bool _showAuthForm = true; 
+  bool _isSignupMode = true; // Toggle between Login and Signup
+  bool _isLoading = false;
 
-  @override void initState() {
-    super.initState();
-    _fetchResults();
-  }
+  Future<void> _handleAuth() async {
+    setState(() => _isLoading = true);
+    final api = Provider.of<UniBridgeApi>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
 
-  Future<void> _fetchResults() async {
-     final api = Provider.of<UniBridgeApi>(context, listen: false);
-     final data = await api.getResults(api.currentUsername ?? "", "");
-     if (mounted) setState(() { results = data; _isLoading = false; });
+    bool success = false;
+    if (_isSignupMode) {
+      success = await api.signup(_userController.text, _passController.text);
+    } else {
+      success = await api.login(_userController.text, _passController.text);
+    }
+
+    if (success) {
+      final data = await api.getResults(_userController.text, _passController.text);
+      if (mounted) {
+        setState(() {
+          results = data;
+          _showAuthForm = false;
+          _isLoading = false;
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        messenger.showSnackBar(const SnackBar(content: Text("Authentication failed. Check credentials.")));
+      }
+    }
   }
 
   @override 
@@ -836,11 +801,56 @@ class _ResultsScreenState extends State<ResultsScreen> {
       body: ResponsiveContainer(
         child: _isLoading 
           ? const Center(child: LoadingTechWidget()) 
-          : _buildResultsList(t)
+          : _showAuthForm 
+              ? _buildAuthForm(t) 
+              : _buildResultsList(t)
       )
     ); 
   }
   
+  Widget _buildAuthForm(AppTranslations t) { 
+    return Padding(
+      padding: const EdgeInsets.all(32), 
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center, 
+        children: [
+          const Icon(Icons.shield_outlined, size: 64, color: TechTheme.neonMagenta), 
+          const SizedBox(height: 24), 
+          Text(
+            _isSignupMode ? "REGISTER SESSION" : "ACCESS ACCOUNT", 
+            style: TechTheme.textTheme.displayMedium?.copyWith(color: TechTheme.neonMagenta)
+          ), 
+          const SizedBox(height: 32), 
+          TextField(
+            controller: _userController, 
+            style: TechTheme.textTheme.bodyLarge, 
+            decoration: TechTheme.inputDecoration(t.t('username'))
+          ), 
+          const SizedBox(height: 16), 
+          TextField(
+            controller: _passController, 
+            obscureText: true, 
+            style: TechTheme.textTheme.bodyLarge, 
+            decoration: TechTheme.inputDecoration(t.t('password'))
+          ), 
+          const SizedBox(height: 32), 
+          SizedBox(
+            width: double.infinity, 
+            child: TechButton(text: _isSignupMode ? "SAVE PROFILE" : "LOGIN", onPressed: _handleAuth)
+          ),
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: () => setState(() => _isSignupMode = !_isSignupMode),
+            child: Text(
+              _isSignupMode ? "Already registered? Login here" : "Need to save results? Register profile",
+              style: const TextStyle(color: TechTheme.neonCyan)
+            ),
+          )
+        ]
+      )
+    ); 
+  }
+
   Widget _buildResultsList(AppTranslations t) {
     return Column(children: [
       Padding(
@@ -891,273 +901,7 @@ class FeedbackScreen extends StatelessWidget {
   @override Widget build(BuildContext context) { final t = AppTranslations(Provider.of<AppLocale>(context).locale); return Scaffold(backgroundColor: TechTheme.deepPurpleBG, appBar: const TechAppBar(title: "SYS_FEEDBACK"), body: ResponsiveContainer(child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text(t.t('feedback_title'), style: TechTheme.textTheme.displayMedium), const SizedBox(height: 40), const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Text("😡", style: TextStyle(fontSize: 32)), SizedBox(width: 20), Text("😐", style: TextStyle(fontSize: 32)), SizedBox(width: 20), Text("😊", style: TextStyle(fontSize: 32)), SizedBox(width: 20), Text("🤩", style: TextStyle(fontSize: 32))]), const SizedBox(height: 40), SizedBox(width: 200, child: TechButton(text: t.t('feedback_submit'), onPressed: () => Navigator.pop(context)))])))); }
 }
 
-// --- NEW WEB WINDOWS ---
-
-// --- DASHBOARD WINDOW (DashboardWindow.tsx equivalent) ---
-class DashboardWindow extends StatelessWidget {
-  const DashboardWindow({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppTranslations(Provider.of<AppLocale>(context).locale);
-    
-    return MainWebLayout(
-      child: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 900),
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(t.t('nav_dashboard'), style: TechTheme.textTheme.displayMedium),
-              const SizedBox(height: 24),
-              Expanded(
-                child: GridView.count(
-                  crossAxisCount: MediaQuery.of(context).size.width > 800 ? 3 : 1,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  children: [
-                    _buildStatCard("SYSTEM STATUS", "ONLINE", Icons.check_circle),
-                    _buildStatCard("MATCHES FOUND", "12", Icons.data_usage),
-                    GestureDetector(
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ResultsScreen())),
-                      child: _buildStatCard("PROFILE SCORE", "VIEW RESULTS", Icons.person),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ).animate().fadeIn(duration: 500.ms),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatCard(String title, String value, IconData icon) {
-    return Container(
-      decoration: TechTheme.cardDecoration,
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 48, color: TechTheme.neonMagenta),
-          const SizedBox(height: 16),
-          Text(title, style: TechTheme.textTheme.bodyMedium?.copyWith(color: TechTheme.neonCyan)),
-          const SizedBox(height: 8),
-          Text(value, style: TechTheme.textTheme.displayLarge, textAlign: TextAlign.center,),
-        ],
-      ),
-    );
-  }
-}
-
-// --- SEARCH WINDOW (SearchWindow.tsx equivalent) ---
-class SearchWindow extends StatelessWidget {
-  const SearchWindow({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppTranslations(Provider.of<AppLocale>(context).locale);
-    return MainWebLayout(
-      child: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 800),
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(t.t('nav_search'), style: TechTheme.textTheme.displayMedium),
-              const SizedBox(height: 32),
-              TextField(
-                style: TechTheme.textTheme.bodyLarge,
-                decoration: TechTheme.inputDecoration(t.t('search_hint')).copyWith(
-                  prefixIcon: const Icon(Icons.search, color: TechTheme.neonCyan),
-                ),
-              ),
-              const SizedBox(height: 32),
-              Expanded(
-                child: Center(
-                  child: Text("NO QUERIES DETECTED", style: TechTheme.textTheme.bodyMedium),
-                ),
-              )
-            ],
-          ).animate().fade(),
-        ),
-      ),
-    );
-  }
-}
-
-// --- CATALOG WINDOW (CatalogWindow.tsx equivalent) ---
-class CatalogWindow extends StatelessWidget {
-  const CatalogWindow({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppTranslations(Provider.of<AppLocale>(context).locale);
-    return MainWebLayout(
-      child: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 900),
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(t.t('catalog_title'), style: TechTheme.textTheme.displayMedium),
-              const SizedBox(height: 24),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: 5,
-                  itemBuilder: (context, index) {
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(24),
-                      decoration: TechTheme.cardDecoration,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text("MODULE 0${index + 1}", style: TechTheme.textTheme.bodyLarge?.copyWith(color: TechTheme.neonCyan)),
-                          TechButton(text: "VIEW", onPressed: () {}, isPrimary: false),
-                        ],
-                      ),
-                    ).animate().slideX(delay: (index * 100).ms);
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// --- ARTICLES WINDOW (ArticlesWindow.tsx equivalent) ---
-class ArticlesWindow extends StatelessWidget {
-  const ArticlesWindow({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppTranslations(Provider.of<AppLocale>(context).locale);
-    return MainWebLayout(
-      child: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 900),
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(t.t('articles_title'), style: TechTheme.textTheme.displayMedium),
-              const SizedBox(height: 24),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: 3,
-                  itemBuilder: (context, index) {
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(24),
-                      decoration: TechTheme.cardDecoration,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text("DATA ENTRY LOG #0${index + 1}", style: TechTheme.textTheme.labelLarge),
-                          const SizedBox(height: 8),
-                          Text("Encrypted sector data detailing future career trajectories based on algorithm results...", style: TechTheme.textTheme.bodyMedium),
-                        ],
-                      ),
-                    ).animate().fadeIn(delay: (index * 150).ms);
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// --- AUTH WINDOW (AuthWindow.tsx equivalent extracted from Results) ---
-class AuthWindow extends StatefulWidget {
-  const AuthWindow({super.key});
-
-  @override
-  State<AuthWindow> createState() => _AuthWindowState();
-}
-
-class _AuthWindowState extends State<AuthWindow> {
-  final _userController = TextEditingController();
-  final _passController = TextEditingController();
-  bool _isSignupMode = false;
-  bool _isLoading = false;
-
-  Future<void> _handleAuth() async {
-    setState(() => _isLoading = true);
-    final api = Provider.of<UniBridgeApi>(context, listen: false);
-    
-    bool success = _isSignupMode 
-        ? await api.signup(_userController.text, _passController.text) 
-        : await api.login(_userController.text, _passController.text);
-
-    setState(() => _isLoading = false);
-    if (success && mounted) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DashboardWindow()));
-    } else if (mounted) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Authentication failed. Check credentials.")));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppTranslations(Provider.of<AppLocale>(context).locale);
-    
-    return MainWebLayout(
-      child: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 500),
-          padding: const EdgeInsets.all(40),
-          decoration: TechTheme.cardDecoration,
-          child: _isLoading 
-            ? const Center(child: CircularProgressIndicator(color: TechTheme.neonCyan))
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.shield_outlined, size: 64, color: TechTheme.neonMagenta),
-                  const SizedBox(height: 24),
-                  Text(t.t('auth_title'), style: TechTheme.textTheme.displayMedium),
-                  const SizedBox(height: 32),
-                  TextField(
-                    controller: _userController,
-                    style: TechTheme.textTheme.bodyLarge,
-                    decoration: TechTheme.inputDecoration(t.t('username')),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _passController,
-                    obscureText: true,
-                    style: TechTheme.textTheme.bodyLarge,
-                    decoration: TechTheme.inputDecoration(t.t('password')),
-                  ),
-                  const SizedBox(height: 32),
-                  SizedBox(
-                    width: double.infinity,
-                    child: TechButton(
-                      text: _isSignupMode ? t.t('auth_register_btn') : t.t('auth_login_btn'), 
-                      onPressed: _handleAuth
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextButton(
-                    onPressed: () => setState(() => _isSignupMode = !_isSignupMode),
-                    child: Text(
-                      _isSignupMode ? "RETURNING USER? LOGIN" : "NEW USER? REGISTER",
-                      style: const TextStyle(color: TechTheme.neonCyan),
-                    ),
-                  ),
-                ],
-              ).animate().scale(duration: 400.ms),
-        ),
-      ),
-    );
-  }
+class LoadingTechWidget extends StatelessWidget { 
+  const LoadingTechWidget({super.key}); 
+  @override Widget build(BuildContext context) { final t = AppTranslations(Provider.of<AppLocale>(context).locale); return Column(mainAxisAlignment: MainAxisAlignment.center, children: [const SizedBox(width: 40, height: 40, child: CircularProgressIndicator(color: TechTheme.neonCyan, strokeWidth: 3)), const SizedBox(height: 24), Text(t.t('loading_text'), style: TechTheme.textTheme.bodyMedium?.copyWith(color: TechTheme.neonMagenta))]); } 
 }
