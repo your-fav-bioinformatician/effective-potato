@@ -1,192 +1,211 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class UniBridgeApi {
-  // ✅ FIXED: Base URL must only contain the domain host
-  static String get baseUrl {
-    return 'https://effective-potato-production.up.railway.app';
+class UniBridgeApi extends ChangeNotifier {
+  // Update this to your actual backend URL (e.g., your local network IP or deployed domain)
+  static const String baseUrl = 'https://effective-potato-production.up.railway.app'; 
+  
+  String? _currentUserId;
+  String? _currentUsername;
+  String? _token;
+
+  String? get currentUserId => _currentUserId;
+  String? get currentUsername => _currentUsername;
+  bool get isAuthenticated => _token != null;
+
+  // --- HEADERS ---
+  Map<String, String> get _headers {
+    final headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    if (_token != null) {
+      headers['Authorization'] = 'Bearer $_token';
+    }
+    return headers;
   }
 
-  String? currentUserId; 
-  String? currentUsername;
-
-  // Key constants for SharedPreferences
-  static const String _keyUserId = 'unibridge_user_id';
-  static const String _keyUsername = 'unibridge_username';
-
-  /// Restores session on app startup
+  // --- SESSION MANAGEMENT ---
   Future<bool> restoreSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    final storedUserId = prefs.getString(_keyUserId);
-    if (storedUserId == null) return false;
-
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/auth/verify/$storedUserId'),
-      ).timeout(const Duration(seconds: 30));
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+      final username = prefs.getString('username');
+      final userId = prefs.getString('user_id');
 
-      if (response.statusCode == 200) {
-        currentUserId = storedUserId;
-        currentUsername = prefs.getString(_keyUsername);
+      if (token != null && token.isNotEmpty) {
+        _token = token;
+        _currentUsername = username;
+        _currentUserId = userId;
+        notifyListeners();
         return true;
       }
     } catch (e) {
-      debugPrint("Session restore error: $e");
+      debugPrint('Error restoring session: $e');
     }
-    
-    await clearLocalSession();
     return false;
   }
 
-  Future<void> _saveLocalSession(String userId, [String? username]) async {
+  Future<void> _saveSession(String token, String username, String userId) async {
     final prefs = await SharedPreferences.getInstance();
-    currentUserId = userId;
-    await prefs.setString(_keyUserId, userId);
-    if (username != null) {
-      currentUsername = username;
-      await prefs.setString(_keyUsername, username);
-    }
+    await prefs.setString('auth_token', token);
+    await prefs.setString('username', username);
+    await prefs.setString('user_id', userId);
+    
+    _token = token;
+    _currentUsername = username;
+    _currentUserId = userId;
+    notifyListeners();
   }
 
-  Future<void> clearLocalSession() async {
+  Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyUserId);
-    await prefs.remove(_keyUsername);
-    currentUserId = null;
-    currentUsername = null;
+    await prefs.clear();
+    
+    _token = null;
+    _currentUsername = null;
+    _currentUserId = null;
+    notifyListeners();
   }
 
-  Future<bool> initializeUser(Map<String, dynamic> userData) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/quiz/init'),
-        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-        body: jsonEncode(userData),
-      ).timeout(const Duration(seconds: 30));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final id = data['user_id'].toString();
-        await _saveLocalSession(id);
-        return true;
-      } else {
-        throw Exception("Server [${response.statusCode}]: ${response.body}");
-      }
-    } catch (e) {
-      throw Exception(e.toString());
-    }
-  }
-
-  Future<bool> signup(String username, String password) async {
-    if (currentUserId == null) return false;
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/signup'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'user_id': currentUserId,
-          'username': username,
-          'password': password
-        }),
-      ).timeout(const Duration(seconds: 30));
-
-      if (response.statusCode == 200) {
-        await _saveLocalSession(currentUserId!, username);
-        return true;
-      }
-      return false;
-    } catch (e) {
-      debugPrint("Signup error: $e");
-      return false;
-    }
-  }
-
+  // --- AUTHENTICATION ---
   Future<bool> login(String username, String password) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/auth/login'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'username': username, 'password': password}),
-      ).timeout(const Duration(seconds: 30));
+        body: jsonEncode({
+          'username': username,
+          'password': password,
+        }),
+      );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        await _saveLocalSession(data['user_id'], data['username']);
+        await _saveSession(data['token'], username, data['user_id'] ?? username);
         return true;
+      } else {
+        debugPrint('Login failed: ${response.body}');
+        return false;
       }
-      return false;
     } catch (e) {
-      debugPrint("Login error: $e");
+      debugPrint('Login error: $e');
       return false;
     }
   }
 
-  Future<void> logout() async {
-    if (currentUserId != null) {
-      try {
-        await http.post(
-          Uri.parse('$baseUrl/auth/logout'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'user_id': currentUserId}),
-        );
-      } catch (e) {
-        debugPrint("Logout server sync error: $e");
+  Future<bool> signup(String username, String password) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/register'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'username': username,
+          'password': password,
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        // Auto-login after successful registration
+        return await login(username, password);
+      } else {
+        debugPrint('Signup failed: ${response.body}');
+        return false;
       }
+    } catch (e) {
+      debugPrint('Signup error: $e');
+      return false;
     }
-    await clearLocalSession();
+  }
+
+  // --- ASSESSMENT FLOW ---
+  Future<bool> initializeUser(Map<String, dynamic> userData) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/assessment/init'),
+        headers: _headers,
+        body: jsonEncode(userData),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return true;
+      } else {
+        debugPrint('Init user failed: ${response.body}');
+        throw Exception('Failed to initialize profile. Status: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Init user error: $e');
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>?> getNextQuestion() async {
-    if (currentUserId == null) return null;
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/quiz/next_q?user_id=$currentUserId'),
-        headers: {'Accept': 'application/json'},
-      ).timeout(const Duration(seconds: 30));
+        Uri.parse('$baseUrl/assessment/question'),
+        headers: _headers,
+      );
 
-      if (response.statusCode == 200) return jsonDecode(response.body);
-      return null;
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        // Assuming API returns { "status": "active", "layer": 1, "question_data": {...} }
+        // or { "status": "completed" }
+        return data;
+      } else {
+        debugPrint('Get question failed: ${response.body}');
+        return null;
+      }
     } catch (e) {
-      debugPrint("Error NextQ: $e");
+      debugPrint('Get question error: $e');
       return null;
     }
   }
 
-  Future<bool> processAnswer(int answer) async {
-    if (currentUserId == null) return false;
+  Future<void> processAnswer(int answerValue) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/quiz/process_a'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'user_id': currentUserId, 'answer': answer}),
-      ).timeout(const Duration(seconds: 30));
-
-      return response.statusCode == 200;
-    } catch (e) {
-      debugPrint("Error ProcessA: $e");
-      return false;
-    }
-  }
-
-  Future<List<dynamic>> getResults(String username, String password) async {
-    if (currentUserId == null) return [];
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/results/results'),
-        headers: {'Content-Type': 'application/json'},
+        Uri.parse('$baseUrl/assessment/answer'),
+        headers: _headers,
         body: jsonEncode({
-          'user_id': currentUserId, 
-          'username': username, 
-          'password': password
+          'answer_value': answerValue,
         }),
-      ).timeout(const Duration(seconds: 30));
+      );
 
-      if (response.statusCode == 200) return jsonDecode(response.body) as List<dynamic>;
-      return [];
+      if (response.statusCode != 200) {
+        debugPrint('Process answer failed: ${response.body}');
+      }
     } catch (e) {
-      debugPrint("Error Results: $e");
+      debugPrint('Process answer error: $e');
+    }
+  }
+
+  // --- RESULTS ---
+  Future<List<dynamic>> getResults(String username, String queryParam) async {
+    try {
+      // Allow passing a specific username or default to current session
+      final targetUser = username.isNotEmpty ? username : _currentUsername;
+      
+      final response = await http.get(
+        Uri.parse('$baseUrl/results?user=$targetUser&q=$queryParam'),
+        headers: _headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is Map && data.containsKey('matches')) {
+          return data['matches'] as List<dynamic>;
+        } else if (data is List) {
+          return data;
+        }
+        return [];
+      } else {
+        debugPrint('Get results failed: ${response.body}');
+        return [];
+      }
+    } catch (e) {
+      debugPrint('Get results error: $e');
       return [];
     }
   }
