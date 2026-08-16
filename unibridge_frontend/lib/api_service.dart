@@ -10,9 +10,37 @@ class UniBridgeApi {
 
   String? currentUserId; 
   String? currentUsername;
+  // Set by restoreSession(): whether this restored user already finished the
+  // quiz, so the caller can route straight to results instead of always
+  // dropping them back into the quiz.
+  bool? lastRestoredQuizCompleted;
 
   static const String _keyUserId = 'unibridge_user_id';
   static const String _keyUsername = 'unibridge_username';
+
+  // Pulls a human-readable message out of a FastAPI error response.
+  // FastAPI's own validation errors (422) return `detail` as a LIST of
+  // objects, while HTTPException(detail=...) returns it as a plain STRING.
+  // Blindly treating `detail` as a String crashes with a type error that
+  // gets swallowed by the surrounding try/catch, which is why errors here
+  // used to show up as a generic "Network Error" with nothing in the logs.
+  String _extractError(http.Response response, String fallback) {
+    try {
+      final body = jsonDecode(response.body);
+      final detail = body is Map ? body['detail'] : null;
+      if (detail is String && detail.isNotEmpty) return detail;
+      if (detail is List && detail.isNotEmpty) {
+        final messages = detail
+            .map((e) => e is Map && e['msg'] != null ? e['msg'].toString() : e.toString())
+            .join(' ');
+        if (messages.isNotEmpty) return messages;
+      }
+      return "$fallback (HTTP ${response.statusCode})";
+    } catch (e) {
+      debugPrint("Could not parse error body: $e | raw: ${response.body}");
+      return "$fallback (HTTP ${response.statusCode})";
+    }
+  }
 
   Future<bool> restoreSession() async {
     final prefs = await SharedPreferences.getInstance();
@@ -27,8 +55,15 @@ class UniBridgeApi {
       if (response.statusCode == 200) {
         currentUserId = storedUserId;
         currentUsername = prefs.getString(_keyUsername);
+        try {
+          final data = jsonDecode(response.body);
+          lastRestoredQuizCompleted = data['quiz_completed'] == true;
+        } catch (_) {
+          lastRestoredQuizCompleted = false;
+        }
         return true;
       }
+      debugPrint("Session restore failed: ${_extractError(response, 'Session invalid')}");
     } catch (e) {
       debugPrint("Session restore error: $e");
     }
@@ -101,16 +136,17 @@ class UniBridgeApi {
         body: jsonEncode(payload),
       ).timeout(const Duration(seconds: 30));
 
-      final data = jsonDecode(response.body);
-      
+      debugPrint("Signup response [${response.statusCode}]: ${response.body}");
+
       if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
         await _saveLocalSession(data['user_id'] ?? currentUserId ?? 'temp_id', username);
         return null;
       }
-      return data['detail'] ?? "Unknown error occurred";
+      return _extractError(response, "Signup failed");
     } catch (e) {
       debugPrint("Signup error: $e");
-      return "Network Error: Please check your connection.";
+      return "Network error while signing up: $e";
     }
   }
 
@@ -123,16 +159,17 @@ class UniBridgeApi {
         body: jsonEncode({'email': email, 'password': password}),
       ).timeout(const Duration(seconds: 30));
 
-      final data = jsonDecode(response.body);
+      debugPrint("Login response [${response.statusCode}]: ${response.body}");
 
       if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
         await _saveLocalSession(data['user_id'], data['username']);
         return null;
       }
-      return data['detail'] ?? "Login failed. Please verify credentials.";
+      return _extractError(response, "Login failed. Please verify credentials.");
     } catch (e) {
       debugPrint("Login error: $e");
-      return "Network Error: Please check your connection.";
+      return "Network error while logging in: $e";
     }
   }
 
@@ -184,7 +221,14 @@ class UniBridgeApi {
   }
 
   Future<List<dynamic>> getResults() async {
-    if (currentUserId == null) return [];
+    // Previously this silently returned an empty list when currentUserId was
+    // null, which is exactly why guests could land on a blank results page
+    // with no auth form and no error: the call short-circuited before ever
+    // hitting the 403 that triggers the sign-up form. Throw instead so the
+    // caller can react (e.g. send the user back to auth).
+    if (currentUserId == null) {
+      throw Exception("NO_ACTIVE_SESSION");
+    }
     
     try {
       final response = await http.post(
@@ -199,7 +243,7 @@ class UniBridgeApi {
         throw Exception("GUEST_AUTH_REQUIRED");
       } else {
         // Essential: Do not return an empty array silently on 500s.
-        throw Exception("Backend failed to calculate results. Please try again.");
+        throw Exception(_extractError(response, "Backend failed to calculate results"));
       }
     } catch (e) {
       debugPrint("Error Results: $e");

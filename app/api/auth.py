@@ -1,6 +1,7 @@
 import logging
+import re
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from bson import ObjectId
 from app.deps import get_session_manager, get_mongo_db, MONGO_CONNECTION_STRING, MONGO_DB_NAME
@@ -10,11 +11,28 @@ from app.security import hash_password, verify_password
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+PASSWORD_RULE_MSG = "Password must be at least 8 characters and include an uppercase letter, a number, and a special character."
+
+def _is_password_valid(password: str) -> bool:
+    return (
+        len(password) >= 8
+        and re.search(r"[A-Z]", password) is not None
+        and re.search(r"[0-9]", password) is not None
+        and re.search(r"[!@#$%^&*(),.?\":{}|<>]", password) is not None
+    )
+
 class SignupRequest(BaseModel):
     user_id: Optional[str] = None
     username: str
     email: str
     password: str
+
+    @field_validator("password")
+    @classmethod
+    def password_complexity(cls, v: str) -> str:
+        if not _is_password_valid(v):
+            raise ValueError(PASSWORD_RULE_MSG)
+        return v
 
 class LoginRequest(BaseModel):
     email: str
@@ -30,10 +48,10 @@ def signup(req: SignupRequest, db = Depends(get_mongo_db), mgr: SessionManager =
         email_lower = req.email.lower().strip()
         username_lower = req.username.lower().strip()
 
-        # Case-insensitive checks for existing emails/usernames
-        if db["users_data"].find_one({"email": {"$regex": f"^{email_lower}$", "$options": "i"}}):
+
+        if db["users_data"].find_one({"email": {"$regex": f"^{re.escape(email_lower)}$", "$options": "i"}}):
             raise HTTPException(status_code=400, detail="Email already registered.")
-        if db["users_data"].find_one({"username": {"$regex": f"^{username_lower}$", "$options": "i"}}):
+        if db["users_data"].find_one({"username": {"$regex": f"^{re.escape(username_lower)}$", "$options": "i"}}):
             raise HTTPException(status_code=400, detail="Username already taken.")
 
         hashed_pw = hash_password(req.password)
@@ -73,7 +91,9 @@ def signup(req: SignupRequest, db = Depends(get_mongo_db), mgr: SessionManager =
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Signup error: {str(e)}")
+        # logger.exception logs the full traceback, not just str(e) — this is
+        # what was missing that made these failures show up nowhere.
+        logger.exception("Signup error")
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 @router.post("/login")
@@ -81,7 +101,7 @@ def login(req: LoginRequest, db = Depends(get_mongo_db), mgr: SessionManager = D
     """Verifies credentials and activates session persistence."""
     try:
         email_lower = req.email.lower().strip()
-        user = db["users_data"].find_one({"email": {"$regex": f"^{email_lower}$", "$options": "i"}})
+        user = db["users_data"].find_one({"email": {"$regex": f"^{re.escape(email_lower)}$", "$options": "i"}})
         
         if not user:
             raise HTTPException(status_code=401, detail="Invalid email or password.")
@@ -100,8 +120,8 @@ def login(req: LoginRequest, db = Depends(get_mongo_db), mgr: SessionManager = D
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Login error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"An error occurred during login.")
+        logger.exception("Login error")
+        raise HTTPException(status_code=500, detail=f"An error occurred during login: {str(e)}")
 
 @router.post("/logout")
 def logout(req: SessionRequest, mgr: SessionManager = Depends(get_session_manager)):
@@ -120,7 +140,10 @@ def verify_session(user_id: str, db = Depends(get_mongo_db)):
         
         if not user:
             raise HTTPException(status_code=404, detail="Session invalid")
-        return {"status": "valid"}
+        quiz_completed = user.get("session_active", True) is False
+        return {"status": "valid", "quiz_completed": quiz_completed}
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Verify session error: {str(e)}")
+        logger.exception("Verify session error")
         raise HTTPException(status_code=500, detail="Server error")

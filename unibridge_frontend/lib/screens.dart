@@ -239,7 +239,11 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
 
     if (hasValidSession) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const QuizScreen()));
+      if (api.lastRestoredQuizCompleted == true) {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ResultsScreen()));
+      } else {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const QuizScreen()));
+      }
     } else {
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const CyberAuthScreen()));
     }
@@ -264,7 +268,7 @@ class CyberAuthScreen extends StatefulWidget {
 class _CyberAuthScreenState extends State<CyberAuthScreen> {
   bool isLogin = true;
   bool _isLoading = false;
-  bool _obscurePassword = true; // Toggle for password visibility
+  bool _obscurePassword = true; 
 
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
@@ -326,7 +330,6 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const SizedBox(height: 40),
-              // System Boot Text (Tiny text)
               Text(
                 'SYSTEM BOOT v2.0',
                 style: TechTheme.textTheme.bodyMedium?.copyWith(
@@ -337,14 +340,12 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Main Title
               Text(
                 'UniBridge\n',
                 textAlign: TextAlign.center,
-                style: TechTheme.textTheme.displayMedium?.copyWith(
-                  fontFamily: 'PressStart2P', // Using requested font family
+                style: TechTheme.textTheme.displayLarge?.copyWith(
                   color: TechTheme.neonMagenta,
-                  fontSize: 32, // Adjusted scaling for blocky fonts
+                  fontSize: 32, 
                   height: 1.2,
                   letterSpacing: 2,
                   shadows: [
@@ -356,7 +357,6 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
                 ),
               ),
 
-              // Glowing Divider
               Container(
                 height: 2,
                 width: 80,
@@ -368,11 +368,9 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Subtitle
               Text(
                 "LET'S DECODE YOUR FUTURE.",
-                style: TechTheme.textTheme.bodyMedium?.copyWith(
-                  fontFamily: 'VT323',
+                style: TechTheme.textTheme.displayMedium?.copyWith(
                   fontSize: 24,
                   color: TechTheme.textSoft,
                   letterSpacing: 1.5,
@@ -380,7 +378,6 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
               ),
               const SizedBox(height: 40),
 
-              // Main Auth Box
               Container(
                 decoration: BoxDecoration(
                   color: TechTheme.darkBoxFill.withValues(alpha: 0.5),
@@ -408,19 +405,18 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
                     ],
                     _buildTextField(
                       label: 'EMAIL',
-                      hint: 'user@example.com', // Updated
+                      hint: 'user@example.com', 
                       controller: _emailController,
                     ),
                     const SizedBox(height: 20),
                     _buildTextField(
                       label: 'PASSWORD',
                       hint: '........',
-                      isPassword: true, // Enabled Show Password
+                      isPassword: true, 
                       controller: _passwordController,
                     ),
                     const SizedBox(height: 30),
 
-                    // Action Button
                     InkWell(
                       onTap: () => _handleAuth(context),
                       child: Container(
@@ -433,8 +429,7 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
                         alignment: Alignment.center,
                         child: Text(
                           isLogin ? '> ENTER SYSTEM' : '> CREATE ACCOUNT',
-                          style: TechTheme.textTheme.bodyLarge?.copyWith(
-                            fontFamily: 'VT323',
+                          style: TechTheme.textTheme.displayMedium?.copyWith(
                             fontSize: 22,
                             color: TechTheme.neonMagenta,
                             fontWeight: FontWeight.bold,
@@ -486,8 +481,7 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
         child: Text(
           title,
           textAlign: TextAlign.center,
-          style: TechTheme.textTheme.bodyLarge?.copyWith(
-            fontFamily: 'VT323',
+          style: TechTheme.textTheme.displayMedium?.copyWith(
             fontSize: 22,
             color: isActive ? TechTheme.neonCyan : TechTheme.textSoft,
             fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
@@ -883,7 +877,8 @@ class QuizScreen extends StatefulWidget {
 }
 class _QuizScreenState extends State<QuizScreen> {
   Map<String, dynamic>? currentQuestion;
-  bool _isLoading = true;
+  bool _isLoading = true; 
+  bool _isAdvancing = false; 
   int? _selectedAnswer;
   
   @override void initState() { super.initState(); _loadNextQuestion(); }
@@ -895,14 +890,13 @@ class _QuizScreenState extends State<QuizScreen> {
       if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ResultsScreen())); 
       return; 
     }
-    if (mounted) setState(() { currentQuestion = q; _selectedAnswer = null; _isLoading = false; });
+    if (mounted) setState(() { currentQuestion = q; _selectedAnswer = null; _isLoading = false; _isAdvancing = false; });
   }
   
   Future<void> _submitAnswer() async {
     if (_selectedAnswer == null) return;
     
-    // Instantly trigger loading bar on the UI side
-    setState(() => _isLoading = true);
+    setState(() => _isAdvancing = true);
     
     final api = Provider.of<UniBridgeApi>(context, listen: false);
     await api.processAnswer(_selectedAnswer!);
@@ -920,7 +914,9 @@ class _QuizScreenState extends State<QuizScreen> {
       body: ResponsiveContainer(
         child: _isLoading 
           ? const Center(child: LoadingTechWidget()) 
-          : SingleChildScrollView(
+          : _isAdvancing
+            ? const Center(child: LoadingTechWidget())
+            : SingleChildScrollView(
               padding: const EdgeInsets.all(24.0),
               child: Column(
                 children: [
@@ -949,7 +945,6 @@ class _QuizScreenState extends State<QuizScreen> {
                   ).animate().fadeIn().moveY(begin: 20, end: 0),
                   const SizedBox(height: 32),
                   
-                  // Vertical Likert Scale
                   Column(
                     children: List.generate(5, (index) { 
                       final val = 5 - index; 
@@ -1033,6 +1028,11 @@ class _ResultsScreenState extends State<ResultsScreen> {
         setState(() => _isLoading = false);
         if (e.toString().contains("GUEST_AUTH_REQUIRED")) {
           setState(() => _showAuthForm = true);
+        } else if (e.toString().contains("NO_ACTIVE_SESSION")) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const CyberAuthScreen()),
+            (route) => false,
+          );
         } else {
           setState(() => _errorMessage = e.toString());
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_errorMessage ?? "Error fetching results")));
@@ -1058,7 +1058,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
     String? error = await api.signup(_userController.text, _emailController.text, _passController.text);
 
     if (error == null) {
-      await _fetchResults(); // Fetch results securely on success
+      await _fetchResults(); 
     } else {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -1091,9 +1091,9 @@ class _ResultsScreenState extends State<ResultsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("SAVE YOUR PROFILE", style: TechTheme.textTheme.displayMedium?.copyWith(fontFamily: 'PressStart2P', color: TechTheme.neonMagenta, fontSize: 18)), 
+          Text("SAVE YOUR PROFILE", style: TechTheme.textTheme.displayLarge?.copyWith(color: TechTheme.neonMagenta, fontSize: 18)), 
           const SizedBox(height: 16),
-          Text("To unlock and securely save your final results, please finalize your account.", style: TechTheme.textTheme.bodyLarge?.copyWith(fontFamily: 'VT323', fontSize: 20, color: TechTheme.textSoft)),
+          Text("To unlock and securely save your final results, please finalize your account.", style: TechTheme.textTheme.displayMedium?.copyWith(fontSize: 20, color: TechTheme.textSoft)),
           const SizedBox(height: 40),
           
           Text("USERNAME", style: TechTheme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
@@ -1103,7 +1103,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
           
           Text("EMAIL", style: TechTheme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          TextField(controller: _emailController, style: TechTheme.textTheme.bodyLarge, decoration: TechTheme.inputDecoration('user@example.com')), // Updated
+          TextField(controller: _emailController, style: TechTheme.textTheme.bodyLarge, decoration: TechTheme.inputDecoration('user@example.com')), 
           const SizedBox(height: 20), 
           
           Text("PASSWORD", style: TechTheme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
@@ -1176,7 +1176,45 @@ class FeedbackScreen extends StatelessWidget {
   @override Widget build(BuildContext context) { final t = AppTranslations(Provider.of<AppLocale>(context).locale); return Scaffold(backgroundColor: TechTheme.deepPurpleBG, appBar: const TechAppBar(title: "SYS_FEEDBACK"), body: ResponsiveContainer(child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text(t.t('feedback_title'), style: TechTheme.textTheme.displayMedium), const SizedBox(height: 40), const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Text("😡", style: TextStyle(fontSize: 32)), SizedBox(width: 20), Text("😐", style: TextStyle(fontSize: 32)), SizedBox(width: 20), Text("😊", style: TextStyle(fontSize: 32)), SizedBox(width: 20), Text("🤩", style: TextStyle(fontSize: 32))]), const SizedBox(height: 40), SizedBox(width: 200, child: TechButton(text: t.t('feedback_submit'), onPressed: () => Navigator.pop(context)))])))); }
 }
 
-class LoadingTechWidget extends StatelessWidget { 
-  const LoadingTechWidget({super.key}); 
-  @override Widget build(BuildContext context) { final t = AppTranslations(Provider.of<AppLocale>(context).locale); return Column(mainAxisAlignment: MainAxisAlignment.center, children: [const SizedBox(width: 40, height: 40, child: CircularProgressIndicator(color: TechTheme.neonCyan, strokeWidth: 3)), const SizedBox(height: 24), Text(t.t('loading_text'), style: TechTheme.textTheme.bodyMedium?.copyWith(color: TechTheme.neonMagenta))]); } 
+class LoadingTechWidget extends StatelessWidget {
+  const LoadingTechWidget({super.key});
+  
+  @override
+  Widget build(BuildContext context) {
+    final t = AppTranslations(Provider.of<AppLocale>(context).locale);
+    
+    return Container(
+      width: 260,
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+      decoration: BoxDecoration(
+        color: TechTheme.cardPurple,
+        borderRadius: BorderRadius.zero, 
+        border: Border.all(color: TechTheme.neonCyan, width: 2),
+        boxShadow: [
+          BoxShadow(color: TechTheme.neonMagenta.withValues(alpha: 0.5), blurRadius: 10, offset: const Offset(4, 4)),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const ClipRect(
+            child: SizedBox(
+              height: 10,
+              child: LinearProgressIndicator(
+                backgroundColor: TechTheme.deepPurpleBG,
+                color: TechTheme.neonMagenta,
+                borderRadius: BorderRadius.zero, 
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            t.t('loading_text'),
+            textAlign: TextAlign.center,
+            style: TechTheme.textTheme.bodyMedium?.copyWith(color: TechTheme.neonCyan, letterSpacing: 1),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: const Duration(milliseconds: 150));
+  }
 }
