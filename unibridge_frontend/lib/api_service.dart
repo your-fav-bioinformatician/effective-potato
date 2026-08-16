@@ -55,10 +55,8 @@ class UniBridgeApi {
     currentUsername = null;
   }
 
-  // Adjusted to handle guest or authenticated flow
   Future<bool> initializeUser(Map<String, dynamic> userData) async {
     try {
-      // If already logged in, attach their ID to the initialization payload
       if (currentUserId != null) {
         userData['user_id'] = currentUserId;
       }
@@ -72,7 +70,6 @@ class UniBridgeApi {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final id = data['user_id'].toString();
-        // Only save session if it's a new ID to avoid overwriting existing auth
         if (currentUserId == null) {
            await _saveLocalSession(id);
         }
@@ -85,8 +82,8 @@ class UniBridgeApi {
     }
   }
 
-
-  Future<bool> signup(String username, String email, String password) async {
+  // Returns null on success, otherwise returns the error message
+  Future<String?> signup(String username, String email, String password) async {
     try {
       final payload = {
         'username': username,
@@ -94,7 +91,6 @@ class UniBridgeApi {
         'password': password
       };
       
-      // If they are a guest upgrading, send their current ID
       if (currentUserId != null) {
         payload['user_id'] = currentUserId!;
       }
@@ -105,19 +101,21 @@ class UniBridgeApi {
         body: jsonEncode(payload),
       ).timeout(const Duration(seconds: 30));
 
+      final data = jsonDecode(response.body);
+      
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
         await _saveLocalSession(data['user_id'] ?? currentUserId ?? 'temp_id', username);
-        return true;
+        return null;
       }
-      return false;
+      return data['detail'] ?? "Unknown error occurred";
     } catch (e) {
       debugPrint("Signup error: $e");
-      return false;
+      return "Network Error: Please check your connection.";
     }
   }
 
-  Future<bool> login(String email, String password) async {
+  // Returns null on success, otherwise returns the error message
+  Future<String?> login(String email, String password) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/auth/login'),
@@ -125,15 +123,16 @@ class UniBridgeApi {
         body: jsonEncode({'email': email, 'password': password}),
       ).timeout(const Duration(seconds: 30));
 
+      final data = jsonDecode(response.body);
+
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
         await _saveLocalSession(data['user_id'], data['username']);
-        return true;
+        return null;
       }
-      return false;
+      return data['detail'] ?? "Login failed. Please verify credentials.";
     } catch (e) {
       debugPrint("Login error: $e");
-      return false;
+      return "Network Error: Please check your connection.";
     }
   }
 
@@ -184,7 +183,6 @@ class UniBridgeApi {
     }
   }
 
-  // ✅ Replace your existing getResults with this exactly:
   Future<List<dynamic>> getResults() async {
     if (currentUserId == null) return [];
     
@@ -192,17 +190,17 @@ class UniBridgeApi {
       final response = await http.post(
         Uri.parse('$baseUrl/results/results'),
         headers: {'Content-Type': 'application/json'},
-        // The backend now securely checks DB using just the user_id
         body: jsonEncode({'user_id': currentUserId}),
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as List<dynamic>;
       } else if (response.statusCode == 403) {
-        // Triggers the post-quiz guest signup form
         throw Exception("GUEST_AUTH_REQUIRED");
+      } else {
+        // Essential: Do not return an empty array silently on 500s.
+        throw Exception("Backend failed to calculate results. Please try again.");
       }
-      return [];
     } catch (e) {
       debugPrint("Error Results: $e");
       rethrow; 
