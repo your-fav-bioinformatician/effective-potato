@@ -90,8 +90,7 @@ def signup(req: SignupRequest, db = Depends(get_mongo_db), mgr: SessionManager =
         mgr.create_session(user_id_str, MONGO_CONNECTION_STRING, MONGO_DB_NAME)
         return {"message": "Account created successfully.", "user_id": user_id_str, "username": req.username}
 
-    except HTTPException:
-        raise
+
     except Exception as e:
         # logger.exception logs the full traceback, not just str(e) — this is
         # what was missing that made these failures show up nowhere.
@@ -131,9 +130,7 @@ def login(req: LoginRequest, db = Depends(get_mongo_db), mgr: SessionManager = D
         mgr.create_session(user_id_str, MONGO_CONNECTION_STRING, MONGO_DB_NAME)
         
         return {"message": "Login successful.", "user_id": user_id_str, "username": user.get("username", "User")}
-    
-    except HTTPException:
-        raise
+
     except Exception as e:
         logger.exception("Login error")
         raise HTTPException(status_code=500, detail=f"An error occurred during login: {str(e)}")
