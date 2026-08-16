@@ -35,7 +35,9 @@ class SignupRequest(BaseModel):
         return v
 
 class LoginRequest(BaseModel):
-    email: str
+    # Accept identifier as 'email' or 'username_or_email'
+    email: Optional[str] = None
+    username_or_email: Optional[str] = None
     password: str
 
 class SessionRequest(BaseModel):
@@ -98,19 +100,32 @@ def signup(req: SignupRequest, db = Depends(get_mongo_db), mgr: SessionManager =
 
 @router.post("/login")
 def login(req: LoginRequest, db = Depends(get_mongo_db), mgr: SessionManager = Depends(get_session_manager)):
-    """Verifies credentials and activates session persistence."""
+    """Verifies credentials via Email OR Username and activates session persistence."""
     try:
-        email_lower = req.email.lower().strip()
-        user = db["users_data"].find_one({"email": {"$regex": f"^{re.escape(email_lower)}$", "$options": "i"}})
+        # Grab whichever identifier field was provided
+        raw_identifier = req.username_or_email or req.email or ""
+        identifier = raw_identifier.lower().strip()
+        
+        if not identifier:
+            raise HTTPException(status_code=422, detail="Username or Email is required.")
+
+        # Search MongoDB for EITHER email OR username (case-insensitive)
+        query_regex = {"$regex": f"^{re.escape(identifier)}$", "$options": "i"}
+        user = db["users_data"].find_one({
+            "$or": [
+                {"email": query_regex},
+                {"username": query_regex}
+            ]
+        })
         
         if not user:
-            raise HTTPException(status_code=401, detail="Invalid email or password.")
+            raise HTTPException(status_code=401, detail="Invalid username/email or password.")
             
         if not user.get("password"):
             raise HTTPException(status_code=401, detail="Account is a guest profile. Please sign up to secure it.")
 
         if not verify_password(req.password, user["password"]):
-            raise HTTPException(status_code=401, detail="Invalid email or password.")
+            raise HTTPException(status_code=401, detail="Invalid username/email or password.")
 
         user_id_str = str(user["_id"])
         mgr.create_session(user_id_str, MONGO_CONNECTION_STRING, MONGO_DB_NAME)

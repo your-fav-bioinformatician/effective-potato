@@ -114,16 +114,14 @@ class UniBridgeApi {
     }
   }
 
-  // Returns null on success, otherwise returns the error message
   Future<String?> signup(String username, String email, String password) async {
     try {
       final Map<String, dynamic> payload = {
-        'username': username,
-        'email': email,
+        'username': username.trim(),
+        'email': email.trim(),
         'password': password
       };
       
-      // Only include user_id if we are actually upgrading an existing guest session
       if (currentUserId != null && currentUserId!.isNotEmpty) {
         payload['user_id'] = currentUserId!;
       }
@@ -138,7 +136,7 @@ class UniBridgeApi {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        await _saveLocalSession(data['user_id'] ?? currentUserId ?? 'temp_id', username);
+        await _saveLocalSession(data['user_id'] ?? currentUserId ?? 'temp_id', username.trim());
         return null;
       }
       return _extractError(response, "Signup failed");
@@ -148,15 +146,16 @@ class UniBridgeApi {
     }
   }
 
-  // Returns null on success, otherwise returns the error message
   Future<String?> login(String identifier, String password) async {
     try {
+      final cleanIdentifier = identifier.trim();
       final response = await http.post(
         Uri.parse('$baseUrl/auth/login'),
         headers: {'Content-Type': 'application/json'},
-        // Map the identifier (which can be email OR username) to the 'username' key
+        // Send both keys so FastAPI validation succeeds regardless of schema version
         body: jsonEncode({
-          'username': identifier, 
+          'email': cleanIdentifier,
+          'username_or_email': cleanIdentifier,
           'password': password
         }),
       ).timeout(const Duration(seconds: 30));
@@ -174,7 +173,6 @@ class UniBridgeApi {
       return "Network error while logging in: $e";
     }
   }
-
   Future<void> logout() async {
     if (currentUserId != null) {
       try {

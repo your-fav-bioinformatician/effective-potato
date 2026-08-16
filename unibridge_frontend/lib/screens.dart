@@ -282,13 +282,19 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
   }
 
   Future<void> _handleAuth(BuildContext context) async {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty || (!isLogin && _usernameController.text.isEmpty)) {
+    final username = _usernameController.text.trim();
+    final emailOrIdentifier = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (emailOrIdentifier.isEmpty || password.isEmpty || (!isLogin && username.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please fill all fields.")));
       return;
     }
 
-    if (!isLogin && !_isPasswordValid(_passwordController.text)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Password must be 8+ chars, with an uppercase, a number, and a special character.")));
+    if (!isLogin && !_isPasswordValid(password)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("Password must be 8+ chars, with an uppercase, a number, and a special character.")
+      ));
       return;
     }
 
@@ -297,9 +303,9 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
     String? errorMessage;
 
     if (isLogin) {
-      errorMessage = await api.login(_emailController.text, _passwordController.text);
+      errorMessage = await api.login(emailOrIdentifier, password);
     } else {
-      errorMessage = await api.signup(_usernameController.text, _emailController.text, _passwordController.text);
+      errorMessage = await api.signup(username, emailOrIdentifier, password);
     }
 
     if (!mounted) return;
@@ -1024,19 +1030,21 @@ class _ResultsScreenState extends State<ResultsScreen> {
         });
       }
     } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        if (e.toString().contains("GUEST_AUTH_REQUIRED")) {
-          setState(() => _showAuthForm = true);
-        } else if (e.toString().contains("NO_ACTIVE_SESSION")) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const CyberAuthScreen()),
-            (route) => false,
-          );
-        } else {
-          setState(() => _errorMessage = e.toString());
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_errorMessage ?? "Error fetching results")));
-        }
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
+      if (e.toString().contains("GUEST_AUTH_REQUIRED")) {
+        setState(() => _showAuthForm = true);
+      } else if (e.toString().contains("NO_ACTIVE_SESSION")) {
+        if (!context.mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const CyberAuthScreen()),
+          (route) => false,
+        );
+      } else {
+        setState(() => _errorMessage = e.toString());
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_errorMessage ?? "Error fetching results")));
       }
     }
   }
@@ -1060,10 +1068,10 @@ class _ResultsScreenState extends State<ResultsScreen> {
     if (error == null) {
       await _fetchResults(); 
     } else {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: Colors.redAccent));
-      }
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: Colors.redAccent));
     }
   }
 
