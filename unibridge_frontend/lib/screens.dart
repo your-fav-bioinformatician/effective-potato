@@ -255,6 +255,7 @@ class _SplashScreenState extends State<SplashScreen> {
 }
 
 // 2. New Initial Cyber Auth Screen
+// 2. Initial Cyber Auth Screen
 class CyberAuthScreen extends StatefulWidget {
   const CyberAuthScreen({super.key});
 
@@ -306,12 +307,10 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
             children: [
               const SizedBox(height: 40),
               // System Boot Text
-              const Text(
+              Text(
                 'SYSTEM BOOT v2.0',
-                style: TextStyle(
-                  color: TechTheme.neonCyan,
+                style: TechTheme.textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.bold,
-                  fontFamily: 'monospace',
                   letterSpacing: 2,
                 ),
               ),
@@ -321,12 +320,10 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
               Text(
                 'UniBridge\n',
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: TechTheme.textTheme.displayMedium?.copyWith(
                   color: TechTheme.neonMagenta,
-                  fontSize: 42,
-                  fontWeight: FontWeight.w900,
+                  fontSize: 54, // Scaled up slightly for vt323
                   height: 0.8,
-                  fontFamily: 'monospace',
                   letterSpacing: 4,
                   shadows: [
                     Shadow(
@@ -354,11 +351,10 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
               const SizedBox(height: 20),
 
               // Subtitle
-              const Text(
+              Text(
                 "LET'S DECODE YOUR FUTURE.",
-                style: TextStyle(
+                style: TechTheme.textTheme.bodyMedium?.copyWith(
                   color: TechTheme.textSoft,
-                  fontFamily: 'monospace',
                   letterSpacing: 1.5,
                 ),
               ),
@@ -449,14 +445,12 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
                         alignment: Alignment.center,
                         child: Text(
                           isLogin ? '> ENTER SYSTEM' : '> CREATE ACCOUNT',
-                          style: const TextStyle(
+                          style: TechTheme.textTheme.bodyLarge?.copyWith(
                             color: TechTheme.neonMagenta,
                             fontWeight: FontWeight.bold,
-                            fontFamily: 'monospace',
                             letterSpacing: 2,
-                            fontSize: 16,
                             shadows: [
-                              Shadow(
+                              const Shadow(
                                 color: TechTheme.neonMagenta,
                                 blurRadius: 5,
                               )
@@ -471,11 +465,14 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
                     Row(
                       children: [
                         Expanded(child: Divider(color: TechTheme.textSoft.withValues(alpha: 0.5))),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16.0),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
                           child: Text(
                             'OR',
-                            style: TextStyle(color: TechTheme.textSoft, fontSize: 12, fontFamily: 'monospace'),
+                            style: TechTheme.textTheme.bodyMedium?.copyWith(
+                              color: TechTheme.textSoft, 
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                         Expanded(child: Divider(color: TechTheme.textSoft.withValues(alpha: 0.5))),
@@ -489,11 +486,10 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
                         onPressed: () {
                           Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const UserInitScreen()));
                         },
-                        child: const Text(
+                        child: Text(
                           '>> Continue as a Guest',
-                          style: TextStyle(
+                          style: TechTheme.textTheme.bodyMedium?.copyWith(
                             color: TechTheme.textSoft,
-                            fontFamily: 'monospace',
                             letterSpacing: 1,
                           ),
                         ),
@@ -507,10 +503,9 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
               // Footer Text
               Text(
                 '[ SECURE CONNECTION ESTABLISHED ]',
-                style: TextStyle(
+                style: TechTheme.textTheme.bodyMedium?.copyWith(
                   color: TechTheme.neonCyan.withValues(alpha: 0.7),
                   fontWeight: FontWeight.w600,
-                  fontFamily: 'monospace',
                   letterSpacing: 1,
                 ),
               ),
@@ -538,10 +533,9 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
         child: Text(
           title,
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: TechTheme.textTheme.bodyLarge?.copyWith(
             color: isActive ? TechTheme.neonCyan : TechTheme.textSoft,
             fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-            fontFamily: 'monospace',
             letterSpacing: 2,
             shadows: isActive
                 ? [const Shadow(color: TechTheme.neonCyan, blurRadius: 10)]
@@ -558,12 +552,10 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TechTheme.textTheme.bodyMedium?.copyWith(
             color: TechTheme.neonMagenta,
             fontWeight: FontWeight.bold,
-            fontFamily: 'monospace',
             letterSpacing: 1.5,
-            fontSize: 12,
           ),
         ),
         const SizedBox(height: 8),
@@ -575,10 +567,10 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
           child: TextField(
             controller: controller,
             obscureText: obscureText,
-            style: const TextStyle(color: TechTheme.textSoft, fontFamily: 'monospace'),
+            style: TechTheme.textTheme.bodyLarge?.copyWith(color: TechTheme.textSoft),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: TextStyle(color: TechTheme.textSoft.withValues(alpha: 0.5), fontFamily: 'monospace'),
+              hintStyle: TechTheme.textTheme.bodyLarge?.copyWith(color: TechTheme.textSoft.withValues(alpha: 0.5)),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               isDense: true,
