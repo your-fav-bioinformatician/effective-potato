@@ -117,13 +117,11 @@ class UniBridgeApi {
     }
   }
 
-  // Returns null on success, otherwise returns the error message
   Future<String?> signup(String username, String email, String password) async {
     try {
-      // Include user_id directly in the map. If currentUserId is null, 
-      // it will safely send {"user_id": null} to satisfy FastAPI.
       final payload = {
-        'user_id': currentUserId, 
+        // If currentUserId is null, send an empty string instead to satisfy FastAPI's strict string requirement
+        'user_id': currentUserId ?? "", 
         'username': username,
         'email': email,
         'password': password
@@ -149,18 +147,19 @@ class UniBridgeApi {
     }
   }
 
-  // Returns null on success, otherwise returns the error message
-  Future<String?> login(String username, String password) async {
+  Future<String?> login(String email, String password) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/auth/login'),
-        // Change to form-urlencoded
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        // Map the email string to the 'username' key, and do NOT jsonEncode the body
-        body: {
-          'username': username,
-          'password': password
-        },
+        // 1. Switch back to expecting JSON
+        headers: {'Content-Type': 'application/json'},
+        // 2. Encode the body as a JSON dictionary
+        // 3. Include both 'email' and 'username' to satisfy Pydantic
+        body: jsonEncode({
+          'email': email,
+          'password': password,
+          'username': email, // Passing the email here just in case the backend requires this key
+        }),
       ).timeout(const Duration(seconds: 30));
 
       debugPrint("Login response [${response.statusCode}]: ${response.body}");
