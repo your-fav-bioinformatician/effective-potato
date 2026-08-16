@@ -70,7 +70,7 @@ class _TechButtonState extends State<TechButton> {
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
         decoration: BoxDecoration(
           color: widget.isPrimary ? TechTheme.neonMagenta.withValues(alpha: 0.2) : TechTheme.deepPurpleBG,
-          borderRadius: BorderRadius.circular(0), // Sharp
+          borderRadius: BorderRadius.circular(0),
           border: Border.all(color: widget.isPrimary ? TechTheme.neonMagenta : TechTheme.neonCyan, width: 2),
           boxShadow: _isPressed 
             ? [] 
@@ -121,7 +121,7 @@ class TechAppBar extends StatelessWidget implements PreferredSizeWidget {
               await api.logout();
               if (context.mounted) {
                 Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+                  MaterialPageRoute(builder: (_) => const CyberAuthScreen()),
                   (route) => false,
                 );
               }
@@ -239,63 +239,353 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
 
     if (hasValidSession) {
-      // Resume active assessment or go straight to results
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const QuizScreen()));
     } else {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const OnboardingScreen()));
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const CyberAuthScreen()));
     }
   }
   
-    @override
-    Widget build(BuildContext context) {
-      return const Scaffold(
-        backgroundColor: TechTheme.deepPurpleBG,
-        body: ResponsiveContainer(child: Center(child: LoadingTechWidget())),
-      );
-    }
-}
-
-// 2. Onboarding
-class OnboardingScreen extends StatelessWidget {
-  const OnboardingScreen({super.key});
   @override
   Widget build(BuildContext context) {
-    final t = AppTranslations(Provider.of<AppLocale>(context).locale);
+    return const Scaffold(
+      backgroundColor: TechTheme.deepPurpleBG,
+      body: ResponsiveContainer(child: Center(child: LoadingTechWidget())),
+    );
+  }
+}
+
+// 2. New Initial Cyber Auth Screen
+class CyberAuthScreen extends StatefulWidget {
+  const CyberAuthScreen({super.key});
+
+  @override
+  State<CyberAuthScreen> createState() => _CyberAuthScreenState();
+}
+
+class _CyberAuthScreenState extends State<CyberAuthScreen> {
+  bool isLogin = true;
+  bool _isLoading = false;
+
+  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
+  Future<void> _handleAuth(BuildContext context) async {
+    setState(() => _isLoading = true);
+    final api = Provider.of<UniBridgeApi>(context, listen: false);
+    bool success = false;
+
+    if (isLogin) {
+      success = await api.login(_emailController.text, _passwordController.text);
+    } else {
+      success = await api.signup(_usernameController.text, _emailController.text, _passwordController.text);
+    }
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    if (!context.mounted) return;
+
+    if (success) {
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const UserInitScreen()));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Authentication failed. Please verify credentials.")));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: TechTheme.deepPurpleBG,
-      appBar: const TechAppBar(), 
       body: ResponsiveContainer(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
+        child: _isLoading 
+        ? const Center(child: LoadingTechWidget())
+        : SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Spacer(),
+              const SizedBox(height: 40),
+              // System Boot Text
+              const Text(
+                'SYSTEM BOOT v2.0',
+                style: TextStyle(
+                  color: TechTheme.neonCyan,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'monospace',
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Main Title
+              Text(
+                'UniBridge\n',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: TechTheme.neonMagenta,
+                  fontSize: 42,
+                  fontWeight: FontWeight.w900,
+                  height: 0.8,
+                  fontFamily: 'monospace',
+                  letterSpacing: 4,
+                  shadows: [
+                    Shadow(
+                      color: TechTheme.neonMagenta.withValues(alpha: 0.8),
+                      blurRadius: 15,
+                    ),
+                  ],
+                ),
+              ),
+
+              // Glowing Divider
               Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(24),
-                decoration: TechTheme.cardDecoration,
+                height: 2,
+                width: 80,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      TechTheme.neonCyan,
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Subtitle
+              const Text(
+                "LET'S DECODE YOUR FUTURE.",
+                style: TextStyle(
+                  color: TechTheme.textSoft,
+                  fontFamily: 'monospace',
+                  letterSpacing: 1.5,
+                ),
+              ),
+              const SizedBox(height: 40),
+
+              // Main Auth Box
+              Container(
+                decoration: BoxDecoration(
+                  color: TechTheme.darkBoxFill.withValues(alpha: 0.5),
+                  border: Border.all(color: TechTheme.neonCyan, width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: TechTheme.neonMagenta.withValues(alpha: 0.15),
+                      blurRadius: 30,
+                      spreadRadius: -10,
+                    ),
+                    BoxShadow(
+                      color: TechTheme.neonCyan.withValues(alpha: 0.15),
+                      blurRadius: 30,
+                      spreadRadius: -10,
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(24.0),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Icon(Icons.settings_suggest, size: 60, color: TechTheme.neonMagenta),
-                    const SizedBox(height: 24),
-                    Text(t.t('intro_title'), style: TechTheme.textTheme.displayLarge, textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    Text(t.t('intro_desc'), style: TechTheme.textTheme.bodyLarge, textAlign: TextAlign.center),
+                    // Tabs
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildTab(
+                            title: '[ LOG IN ]',
+                            isActive: isLogin,
+                            onTap: () => setState(() => isLogin = true),
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildTab(
+                            title: '[ SIGN UP ]',
+                            isActive: !isLogin,
+                            onTap: () => setState(() => isLogin = false),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 30),
+
+                    // Form Fields
+                    if (!isLogin) ...[
+                      _buildTextField(
+                        label: 'USERNAME',
+                        hint: 'enter_username',
+                        controller: _usernameController,
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                    _buildTextField(
+                      label: 'EMAIL',
+                      hint: 'user@nexus.io',
+                      controller: _emailController,
+                    ),
+                    const SizedBox(height: 20),
+                    _buildTextField(
+                      label: 'PASSWORD',
+                      hint: '........',
+                      obscureText: true,
+                      controller: _passwordController,
+                    ),
+                    const SizedBox(height: 30),
+
+                    // Action Button
+                    InkWell(
+                      onTap: () => _handleAuth(context),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2A0845),
+                          border: Border.all(color: TechTheme.neonMagenta, width: 1.5),
+                          boxShadow: [
+                            BoxShadow(
+                              color: TechTheme.neonMagenta.withValues(alpha: 0.4),
+                              blurRadius: 10,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          isLogin ? '> ENTER SYSTEM' : '> CREATE ACCOUNT',
+                          style: const TextStyle(
+                            color: TechTheme.neonMagenta,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'monospace',
+                            letterSpacing: 2,
+                            fontSize: 16,
+                            shadows: [
+                              Shadow(
+                                color: TechTheme.neonMagenta,
+                                blurRadius: 5,
+                              )
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+
+                    // OR Divider
+                    Row(
+                      children: [
+                        Expanded(child: Divider(color: TechTheme.textSoft.withValues(alpha: 0.5))),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16.0),
+                          child: Text(
+                            'OR',
+                            style: TextStyle(color: TechTheme.textSoft, fontSize: 12, fontFamily: 'monospace'),
+                          ),
+                        ),
+                        Expanded(child: Divider(color: TechTheme.textSoft.withValues(alpha: 0.5))),
+                      ],
+                    ),
+                    const SizedBox(height: 30),
+
+                    // Guest Link
+                    Center(
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const UserInitScreen()));
+                        },
+                        child: const Text(
+                          '>> Continue as a Guest',
+                          style: TextStyle(
+                            color: TechTheme.textSoft,
+                            fontFamily: 'monospace',
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 40),
-              SizedBox(
-                width: double.infinity,
-                child: TechButton(text: "> ${t.t('btn_start')}", icon: Icons.login, onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UserInitScreen()))),
+
+              // Footer Text
+              Text(
+                '[ SECURE CONNECTION ESTABLISHED ]',
+                style: TextStyle(
+                  color: TechTheme.neonCyan.withValues(alpha: 0.7),
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'monospace',
+                  letterSpacing: 1,
+                ),
               ),
-              const Spacer(),
+              const SizedBox(height: 20),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildTab({required String title, required bool isActive, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: isActive ? TechTheme.neonCyan : TechTheme.textSoft.withValues(alpha: 0.3),
+              width: isActive ? 2.0 : 1.0,
+            ),
+          ),
+        ),
+        child: Text(
+          title,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: isActive ? TechTheme.neonCyan : TechTheme.textSoft,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+            fontFamily: 'monospace',
+            letterSpacing: 2,
+            shadows: isActive
+                ? [const Shadow(color: TechTheme.neonCyan, blurRadius: 10)]
+                : [],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField({required String label, required String hint, required TextEditingController controller, bool obscureText = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: TechTheme.neonMagenta,
+            fontWeight: FontWeight.bold,
+            fontFamily: 'monospace',
+            letterSpacing: 1.5,
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1B112C),
+            border: Border.all(color: TechTheme.neonCyan, width: 1.5),
+          ),
+          child: TextField(
+            controller: controller,
+            obscureText: obscureText,
+            style: const TextStyle(color: TechTheme.textSoft, fontFamily: 'monospace'),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: TextStyle(color: TechTheme.textSoft.withValues(alpha: 0.5), fontFamily: 'monospace'),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              isDense: true,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -358,12 +648,12 @@ class _UserInitScreenState extends State<UserInitScreen> {
 
   Future<void> _launchMBTI() async {
     const url = 'https://www.16personalities.com/free-personality-test';
-    final messenger = ScaffoldMessenger.of(context);
     if (await canLaunchUrl(Uri.parse(url))) {
       await launchUrl(Uri.parse(url));
     } else {
       if (!mounted) return;
-      messenger.showSnackBar(const SnackBar(content: Text("Could not launch link")));
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Could not launch link")));
     }
   }
 
@@ -382,23 +672,24 @@ class _UserInitScreenState extends State<UserInitScreen> {
       setState(() { _lat = position.latitude; _lon = position.longitude; _isLocationLoading = false; _locationStatus = "Success"; });
     } catch (e) { setState(() { _isLocationLoading = false; _locationStatus = "Error"; }); }
   }
-Future<void> _submit(BuildContext context) async {
+
+  Future<void> _submit(BuildContext context) async {
     if (_isLoading) return; 
 
     final locale = Provider.of<AppLocale>(context, listen: false).locale;
     final t = AppTranslations(locale);
-    final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
     final api = Provider.of<UniBridgeApi>(context, listen: false);
 
     if (!_formKey.currentState!.validate()) return;
     if (_selectedDate == null) {
-      messenger.showSnackBar(SnackBar(content: Text(t.t('msg_select_date'))));
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.t('msg_select_date'))));
       return;
     }
 
     if (_preferClose && (_lat == null || _lon == null)) {
-      messenger.showSnackBar(const SnackBar(content: Text("GPS required for proximity feature.")));
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("GPS required for proximity feature.")));
       return;
     }
 
@@ -424,20 +715,21 @@ Future<void> _submit(BuildContext context) async {
 
       if (!mounted) return;
       setState(() => _isLoading = false);
+      if (!context.mounted) return;
 
       if (success) {
-        navigator.pushReplacement(MaterialPageRoute(builder: (_) => const QuizScreen()));
+        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const QuizScreen()));
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
+      if (!context.mounted) return;
       
-      // REPLACED: Print the exact error caught from the API
-      messenger.showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Error: ${e.toString()}"),
-          backgroundColor: Colors.red, // Optional: makes error more visible
-          duration: const Duration(seconds: 5), // Keep it on screen longer to read it
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
         ),
       );
     }
@@ -673,8 +965,6 @@ class _QuizScreenState extends State<QuizScreen> {
   @override
   Widget build(BuildContext context) {
     final t = AppTranslations(Provider.of<AppLocale>(context).locale);
-    
-    // Utilize the new DAG layer info if available
     final currentLayer = currentQuestion?['layer'];
     
     return Scaffold(
@@ -749,6 +1039,7 @@ class _QuizScreenState extends State<QuizScreen> {
 }
 
 // 5. Results
+// 5. Results
 class ResultsScreen extends StatefulWidget { 
   const ResultsScreen({super.key}); 
   @override 
@@ -756,38 +1047,67 @@ class ResultsScreen extends StatefulWidget {
 }
 
 class _ResultsScreenState extends State<ResultsScreen> {
+  final _emailController = TextEditingController(); 
   final _userController = TextEditingController(); 
   final _passController = TextEditingController(); 
+  
   List<dynamic> results = []; 
-  bool _showAuthForm = true; 
-  bool _isSignupMode = true; // Toggle between Login and Signup
-  bool _isLoading = false;
+  bool _showAuthForm = false; 
+  bool _isLoading = true;
 
-  Future<void> _handleAuth() async {
-    setState(() => _isLoading = true);
+  @override
+  void initState() {
+    super.initState();
+    _fetchResults();
+  }
+
+  Future<void> _fetchResults() async {
     final api = Provider.of<UniBridgeApi>(context, listen: false);
-    final messenger = ScaffoldMessenger.of(context);
-
-    bool success = false;
-    if (_isSignupMode) {
-      success = await api.signup(_userController.text, _passController.text);
-    } else {
-      success = await api.login(_userController.text, _passController.text);
-    }
-
-    if (success) {
-      final data = await api.getResults(_userController.text, _passController.text);
+    
+    try {
+      final data = await api.getResults();
       if (mounted) {
         setState(() {
           results = data;
-          _showAuthForm = false;
+          _showAuthForm = false; 
           _isLoading = false;
         });
       }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        // If backend blocked it due to guest status, show the simple form
+        if (e.toString().contains("GUEST_AUTH_REQUIRED")) {
+          setState(() => _showAuthForm = true);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Error fetching results. Please try again."))
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _handleGuestSignup() async {
+    if (_userController.text.isEmpty || _emailController.text.isEmpty || _passController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please fill all fields.")));
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    final api = Provider.of<UniBridgeApi>(context, listen: false);
+
+    bool success = await api.signup(_userController.text, _emailController.text, _passController.text);
+
+    if (success) {
+      // Re-trigger the fetch now that they are registered
+      await _fetchResults();
     } else {
       if (mounted) {
         setState(() => _isLoading = false);
-        messenger.showSnackBar(const SnackBar(content: Text("Authentication failed. Check credentials.")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Registration failed. Email or username might be taken."))
+        );
       }
     }
   }
@@ -802,50 +1122,66 @@ class _ResultsScreenState extends State<ResultsScreen> {
         child: _isLoading 
           ? const Center(child: LoadingTechWidget()) 
           : _showAuthForm 
-              ? _buildAuthForm(t) 
+              ? _buildSimpleSignupForm() 
               : _buildResultsList(t)
       )
     ); 
   }
   
-  Widget _buildAuthForm(AppTranslations t) { 
+  // A clean, straightforward form designed specifically for post-quiz registration
+  Widget _buildSimpleSignupForm() { 
     return Padding(
-      padding: const EdgeInsets.all(32), 
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48), 
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center, 
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.shield_outlined, size: 64, color: TechTheme.neonMagenta), 
-          const SizedBox(height: 24), 
           Text(
-            _isSignupMode ? "REGISTER SESSION" : "ACCESS ACCOUNT", 
-            style: TechTheme.textTheme.displayMedium?.copyWith(color: TechTheme.neonMagenta)
+            "SAVE YOUR PROFILE", 
+            style: TechTheme.textTheme.displayMedium?.copyWith(color: TechTheme.neonMagenta, fontSize: 28)
           ), 
-          const SizedBox(height: 32), 
+          const SizedBox(height: 12),
+          Text(
+            "To unlock and securely save your final results, please finalize your account.",
+            style: TechTheme.textTheme.bodyLarge?.copyWith(color: TechTheme.textSoft),
+          ),
+          const SizedBox(height: 40),
+          
+          Text("USERNAME", style: TechTheme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
           TextField(
             controller: _userController, 
             style: TechTheme.textTheme.bodyLarge, 
-            decoration: TechTheme.inputDecoration(t.t('username'))
+            decoration: TechTheme.inputDecoration('Enter username')
           ), 
-          const SizedBox(height: 16), 
+          const SizedBox(height: 20), 
+          
+          Text("EMAIL", style: TechTheme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _emailController, 
+            style: TechTheme.textTheme.bodyLarge, 
+            decoration: TechTheme.inputDecoration('user@nexus.io')
+          ), 
+          const SizedBox(height: 20), 
+          
+          Text("PASSWORD", style: TechTheme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
           TextField(
             controller: _passController, 
             obscureText: true, 
             style: TechTheme.textTheme.bodyLarge, 
-            decoration: TechTheme.inputDecoration(t.t('password'))
+            decoration: TechTheme.inputDecoration('••••••••')
           ), 
-          const SizedBox(height: 32), 
+          const SizedBox(height: 40), 
+          
           SizedBox(
             width: double.infinity, 
-            child: TechButton(text: _isSignupMode ? "SAVE PROFILE" : "LOGIN", onPressed: _handleAuth)
+            child: TechButton(
+              text: "> REVEAL RESULTS", 
+              onPressed: _handleGuestSignup,
+              isPrimary: true,
+            )
           ),
-          const SizedBox(height: 16),
-          TextButton(
-            onPressed: () => setState(() => _isSignupMode = !_isSignupMode),
-            child: Text(
-              _isSignupMode ? "Already registered? Login here" : "Need to save results? Register profile",
-              style: const TextStyle(color: TechTheme.neonCyan)
-            ),
-          )
         ]
       )
     ); 

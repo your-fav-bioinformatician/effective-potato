@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class UniBridgeApi {
-  // ✅ FIXED: Base URL must only contain the domain host
   static String get baseUrl {
     return 'https://effective-potato-production.up.railway.app';
   }
@@ -12,11 +11,9 @@ class UniBridgeApi {
   String? currentUserId; 
   String? currentUsername;
 
-  // Key constants for SharedPreferences
   static const String _keyUserId = 'unibridge_user_id';
   static const String _keyUsername = 'unibridge_username';
 
-  /// Restores session on app startup
   Future<bool> restoreSession() async {
     final prefs = await SharedPreferences.getInstance();
     final storedUserId = prefs.getString(_keyUserId);
@@ -58,8 +55,14 @@ class UniBridgeApi {
     currentUsername = null;
   }
 
+  // Adjusted to handle guest or authenticated flow
   Future<bool> initializeUser(Map<String, dynamic> userData) async {
     try {
+      // If already logged in, attach their ID to the initialization payload
+      if (currentUserId != null) {
+        userData['user_id'] = currentUserId;
+      }
+      
       final response = await http.post(
         Uri.parse('$baseUrl/quiz/init'),
         headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
@@ -69,7 +72,10 @@ class UniBridgeApi {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final id = data['user_id'].toString();
-        await _saveLocalSession(id);
+        // Only save session if it's a new ID to avoid overwriting existing auth
+        if (currentUserId == null) {
+           await _saveLocalSession(id);
+        }
         return true;
       } else {
         throw Exception("Server [${response.statusCode}]: ${response.body}");
@@ -79,21 +85,29 @@ class UniBridgeApi {
     }
   }
 
-  Future<bool> signup(String username, String password) async {
-    if (currentUserId == null) return false;
+
+  Future<bool> signup(String username, String email, String password) async {
     try {
+      final payload = {
+        'username': username,
+        'email': email,
+        'password': password
+      };
+      
+      // If they are a guest upgrading, send their current ID
+      if (currentUserId != null) {
+        payload['user_id'] = currentUserId!;
+      }
+
       final response = await http.post(
         Uri.parse('$baseUrl/auth/signup'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'user_id': currentUserId,
-          'username': username,
-          'password': password
-        }),
+        body: jsonEncode(payload),
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
-        await _saveLocalSession(currentUserId!, username);
+        final data = jsonDecode(response.body);
+        await _saveLocalSession(data['user_id'] ?? currentUserId ?? 'temp_id', username);
         return true;
       }
       return false;
@@ -103,12 +117,12 @@ class UniBridgeApi {
     }
   }
 
-  Future<bool> login(String username, String password) async {
+  Future<bool> login(String email, String password) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/auth/login'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'username': username, 'password': password}),
+        body: jsonEncode({'email': email, 'password': password}),
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
@@ -170,24 +184,28 @@ class UniBridgeApi {
     }
   }
 
-  Future<List<dynamic>> getResults(String username, String password) async {
+  // ✅ Replace your existing getResults with this exactly:
+  Future<List<dynamic>> getResults() async {
     if (currentUserId == null) return [];
+    
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/results/results'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'user_id': currentUserId, 
-          'username': username, 
-          'password': password
-        }),
+        // The backend now securely checks DB using just the user_id
+        body: jsonEncode({'user_id': currentUserId}),
       ).timeout(const Duration(seconds: 30));
 
-      if (response.statusCode == 200) return jsonDecode(response.body) as List<dynamic>;
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List<dynamic>;
+      } else if (response.statusCode == 403) {
+        // Triggers the post-quiz guest signup form
+        throw Exception("GUEST_AUTH_REQUIRED");
+      }
       return [];
     } catch (e) {
       debugPrint("Error Results: $e");
-      return [];
+      rethrow; 
     }
   }
 }

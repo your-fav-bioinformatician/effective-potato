@@ -3,18 +3,19 @@ import 'package:google_fonts/google_fonts.dart';
 
 class TechTheme {
   // 🎨 Color Palette (Neon / Cyberpunk)
-  static const Color deepPurpleBG = Color(0xFF0D0221); // Very dark purple background
-  static const Color cardPurple = Color(0xFF261447); // Lighter purple for surfaces
-  static const Color neonCyan = Color(0xFF00FFFF); // Cyberpunk Cyan
-  static const Color neonMagenta = Color(0xFFFF00FF); // Cyberpunk Magenta
-  static const Color textSoft = Color(0xFFB57EDC); // Muted purple for hints/soft text
-  static const Color readableWhite = Color(0xFFF0F0F0); // Off-white for body text readability
+  static const Color deepPurpleBG = Color(0xFF0D0221);
+  static const Color cardPurple = Color(0xFF261447);
+  static const Color darkBoxFill = Color(0xFF1E1136); // Added for the new Auth Screen
+  static const Color neonCyan = Color(0xFF00FFFF);
+  static const Color neonMagenta = Color(0xFFFF00FF);
+  static const Color textSoft = Color(0xFFB57EDC);
+  static const Color readableWhite = Color(0xFFF0F0F0);
 
   // ✒️ Typography (Retro Neon + Clean Sans)
   static TextTheme get textTheme {
     return TextTheme(
       displayLarge: GoogleFonts.pressStart2p( 
-        fontSize: 22, // Kept slightly smaller as this font scales very large
+        fontSize: 22,
         fontWeight: FontWeight.bold,
         color: neonMagenta,
         letterSpacing: 1.5,
@@ -24,7 +25,7 @@ class TechTheme {
         fontWeight: FontWeight.w700,
         color: neonCyan,
       ),
-      bodyLarge: GoogleFonts.inter( // Normal Sans for balance and readability
+      bodyLarge: GoogleFonts.inter(
         fontSize: 16,
         fontWeight: FontWeight.w500,
         color: readableWhite,
@@ -32,7 +33,7 @@ class TechTheme {
       bodyMedium: GoogleFonts.inter(
         fontSize: 14,
         fontWeight: FontWeight.normal,
-        color: neonCyan, // Cyan body accents
+        color: neonCyan,
       ),
       labelLarge: GoogleFonts.vt323(
         fontSize: 24,
@@ -45,13 +46,13 @@ class TechTheme {
   // 🧩 Decorations (Sharp / Glowing)
   static BoxDecoration get cardDecoration => BoxDecoration(
     color: cardPurple,
-    borderRadius: BorderRadius.circular(0), // Sharp, digital edges
-    border: Border.all(color: neonCyan, width: 2), // Neon border
+    borderRadius: BorderRadius.circular(0),
+    border: Border.all(color: neonCyan, width: 2),
     boxShadow: [
       BoxShadow(
-        color: neonMagenta.withValues(alpha: 0.6), // Magenta Glow
+        color: neonMagenta.withValues(alpha: 0.6),
         blurRadius: 10, 
-        offset: const Offset(4, 4), // Kept the retro offset but added blur
+        offset: const Offset(4, 4),
       ),
     ],
   );
@@ -72,7 +73,7 @@ class TechTheme {
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(0),
-      borderSide: const BorderSide(color: neonMagenta, width: 3), // Pops to magenta when focused
+      borderSide: const BorderSide(color: neonMagenta, width: 3),
     ),
   );
 }
