@@ -120,15 +120,14 @@ class UniBridgeApi {
   // Returns null on success, otherwise returns the error message
   Future<String?> signup(String username, String email, String password) async {
     try {
+      // Include user_id directly in the map. If currentUserId is null, 
+      // it will safely send {"user_id": null} to satisfy FastAPI.
       final payload = {
+        'user_id': currentUserId, 
         'username': username,
         'email': email,
         'password': password
       };
-      
-      if (currentUserId != null) {
-        payload['user_id'] = currentUserId!;
-      }
 
       final response = await http.post(
         Uri.parse('$baseUrl/auth/signup'),
@@ -151,12 +150,17 @@ class UniBridgeApi {
   }
 
   // Returns null on success, otherwise returns the error message
-  Future<String?> login(String email, String password) async {
+  Future<String?> login(String username, String password) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/auth/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password}),
+        // Change to form-urlencoded
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        // Map the email string to the 'username' key, and do NOT jsonEncode the body
+        body: {
+          'username': username,
+          'password': password
+        },
       ).timeout(const Duration(seconds: 30));
 
       debugPrint("Login response [${response.statusCode}]: ${response.body}");
