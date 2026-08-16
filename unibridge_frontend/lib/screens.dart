@@ -404,8 +404,8 @@ class _CyberAuthScreenState extends State<CyberAuthScreen> {
                       const SizedBox(height: 20),
                     ],
                     _buildTextField(
-                      label: 'EMAIL',
-                      hint: 'user@example.com', 
+                      label: isLogin ? 'USERNAME OR EMAIL' : 'EMAIL',
+                      hint: isLogin ? 'player1 or user@example.com' : 'user@example.com', 
                       controller: _emailController,
                     ),
                     const SizedBox(height: 20),

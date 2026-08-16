@@ -21,9 +21,6 @@ class UniBridgeApi {
   // Pulls a human-readable message out of a FastAPI error response.
   // FastAPI's own validation errors (422) return `detail` as a LIST of
   // objects, while HTTPException(detail=...) returns it as a plain STRING.
-  // Blindly treating `detail` as a String crashes with a type error that
-  // gets swallowed by the surrounding try/catch, which is why errors here
-  // used to show up as a generic "Network Error" with nothing in the logs.
   String _extractError(http.Response response, String fallback) {
     try {
       final body = jsonDecode(response.body);
@@ -117,15 +114,19 @@ class UniBridgeApi {
     }
   }
 
+  // Returns null on success, otherwise returns the error message
   Future<String?> signup(String username, String email, String password) async {
     try {
-      final payload = {
-        // If currentUserId is null, send an empty string instead to satisfy FastAPI's strict string requirement
-        'user_id': currentUserId ?? "", 
+      final Map<String, dynamic> payload = {
         'username': username,
         'email': email,
         'password': password
       };
+      
+      // Only include user_id if we are actually upgrading an existing guest session
+      if (currentUserId != null && currentUserId!.isNotEmpty) {
+        payload['user_id'] = currentUserId!;
+      }
 
       final response = await http.post(
         Uri.parse('$baseUrl/auth/signup'),
@@ -147,18 +148,16 @@ class UniBridgeApi {
     }
   }
 
-  Future<String?> login(String email, String password) async {
+  // Returns null on success, otherwise returns the error message
+  Future<String?> login(String identifier, String password) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/auth/login'),
-        // 1. Switch back to expecting JSON
         headers: {'Content-Type': 'application/json'},
-        // 2. Encode the body as a JSON dictionary
-        // 3. Include both 'email' and 'username' to satisfy Pydantic
+        // Map the identifier (which can be email OR username) to the 'username' key
         body: jsonEncode({
-          'email': email,
-          'password': password,
-          'username': email, // Passing the email here just in case the backend requires this key
+          'username': identifier, 
+          'password': password
         }),
       ).timeout(const Duration(seconds: 30));
 
@@ -224,11 +223,6 @@ class UniBridgeApi {
   }
 
   Future<List<dynamic>> getResults() async {
-    // Previously this silently returned an empty list when currentUserId was
-    // null, which is exactly why guests could land on a blank results page
-    // with no auth form and no error: the call short-circuited before ever
-    // hitting the 403 that triggers the sign-up form. Throw instead so the
-    // caller can react (e.g. send the user back to auth).
     if (currentUserId == null) {
       throw Exception("NO_ACTIVE_SESSION");
     }
@@ -245,7 +239,6 @@ class UniBridgeApi {
       } else if (response.statusCode == 403) {
         throw Exception("GUEST_AUTH_REQUIRED");
       } else {
-        // Essential: Do not return an empty array silently on 500s.
         throw Exception(_extractError(response, "Backend failed to calculate results"));
       }
     } catch (e) {
